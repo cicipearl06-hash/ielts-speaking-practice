@@ -38,7 +38,14 @@ body {
 .app-shell.mock-mode .sidebar { display: none; }
 .app-shell.mock-mode .main-area { margin-left: 0; }
 .app-shell.mock-mode .top-bar { display: none; }
-.app-shell.mock-mode .main-content { max-width: 980px; padding: 18px 22px 30px; }
+.app-shell.mock-mode .main-content { max-width: 1180px; padding: 14px 18px 26px; }
+.app-shell.mock-mode .progress-bar-wrap { margin-bottom: 14px; }
+.app-shell.mock-mode .part-tabs { margin-bottom: 14px; }
+.app-shell.mock-mode #examPage { display: grid; grid-template-columns: 1.35fr .85fr; gap: 14px; align-items: start; }
+.app-shell.mock-mode .timer-wrap { grid-column: 2; grid-row: 1 / span 3; position: sticky; top: 10px; margin-bottom: 0; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 12px; }
+.app-shell.mock-mode .question-card { grid-column: 1; margin-bottom: 0; min-height: 340px; }
+.app-shell.mock-mode .recording-area { grid-column: 1; margin-bottom: 0; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 14px 16px; }
+.app-shell.mock-mode .controls { grid-column: 1; }
 .app-shell.mock-mode .timer-ring { width: 220px; height: 220px; }
 .app-shell.mock-mode .timer-ring svg { width: 220px; height: 220px; }
 .app-shell.mock-mode .timer-sec { font-size: 66px; font-weight: 900; letter-spacing: .5px; }
@@ -46,6 +53,7 @@ body {
 .app-shell.mock-mode .timer-status { font-size: 15px; font-weight: 600; }
 .app-shell.mock-mode .question-text { font-size: 28px; line-height: 1.5; }
 .app-shell.mock-mode .question-text.part2-task { font-size: 30px; line-height: 1.55; }
+.app-shell.mock-mode #btnSpeak { margin-top: 14px; }
 #authOverlay { display: flex; }
 .auth-closed { display: none !important; }
 
@@ -181,6 +189,9 @@ body {
 .transcript-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 14px; min-height: 56px; font-size: 14px; line-height: 1.7; text-align: left; color: var(--text); }
 .transcript-box .placeholder { color: var(--text-dim); font-style: italic; }
 .transcript-box .interim { color: var(--text-dim); opacity: 0.7; }
+.mock-status { display: none; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+.mock-status b { color: var(--gold); }
+.app-shell.mock-mode .mock-status { display: block; }
 
 /* CONTROLS */
 .controls { display: flex; gap: 10px; }
@@ -309,7 +320,12 @@ body {
   .menu-btn { display: flex !important; }
   .score-grid { grid-template-columns: 1fr 1fr; }
   .score-bars { grid-template-columns: 1fr 1fr; }
-  .app-shell.mock-mode .main-content { padding: 12px 10px 24px; }
+  .app-shell.mock-mode .main-content { padding: 10px 8px 20px; }
+  .app-shell.mock-mode #examPage { grid-template-columns: 1fr; gap: 10px; }
+  .app-shell.mock-mode .timer-wrap { grid-column: 1; grid-row: auto; position: static; top: auto; }
+  .app-shell.mock-mode .question-card { grid-column: 1; min-height: auto; }
+  .app-shell.mock-mode .recording-area { grid-column: 1; }
+  .app-shell.mock-mode .controls { grid-column: 1; }
   .app-shell.mock-mode .timer-ring { width: 170px; height: 170px; }
   .app-shell.mock-mode .timer-ring svg { width: 170px; height: 170px; }
   .app-shell.mock-mode .timer-sec { font-size: 52px; }
@@ -423,6 +439,7 @@ body {
 
       <!-- EXAM -->
       <div class="exam-page" id="examPage">
+        <div class="mock-status" id="mockStatus">🧪 模考进行中：<b>正在准备</b></div>
         <div class="progress-bar-wrap">
           <div class="progress-bar-track">
             <div class="progress-bar-fill" id="progFill" style="width:0%"></div>
@@ -1204,6 +1221,14 @@ function setMockMode(on) {
   if (!shell) return;
   shell.classList.toggle('mock-mode', !!on);
   S.mockMode = !!on;
+  const status = document.getElementById('mockStatus');
+  if (status) status.style.display = on ? 'block' : 'none';
+}
+
+function updateMockStatus(text) {
+  const el = document.getElementById('mockStatus');
+  if (!el) return;
+  el.innerHTML = `🧪 模考进行中：<b>${escHtml(text || '进行中')}</b>`;
 }
 
 function pickP1(name) {
@@ -1314,6 +1339,7 @@ function showPage(p) {
 //  SHOW QUESTIONS
 // ================================================================
 function showP1Q() {
+  updateMockStatus(`Part 1 第 ${S.p1Idx+1}/${S.p1Qs.length} 题`);
   stopSpeaking();
   clearInterval(S.timerInt);
   S.autoTimerPending = false;
@@ -1351,6 +1377,7 @@ function showP1Q() {
 }
 
 function showP2Q() {
+  updateMockStatus('Part 2 独白陈述（2分钟）');
   clearInterval(S.timerInt);
   S.autoTimerPending = false;
   S.nextAfterSpeech = null;
@@ -1389,6 +1416,7 @@ function showP2Q() {
 }
 
 function showP3Q() {
+  updateMockStatus(`Part 3 第 ${S.p3Idx+1}/${S.p3Qs.length} 题`);
   stopSpeaking();
   clearInterval(S.timerInt);
   S.autoTimerPending = false;
@@ -1442,6 +1470,7 @@ function autoAdvP3() {
 }
 
 function goP2() {
+  updateMockStatus('Part 2 准备阶段（阅读话题卡）');
   S.part = 0;
   S.expectingP2Start = false;
   S.autoTimerPending = false;
@@ -1473,6 +1502,8 @@ function showCueScreen() {
   const card = S.customP2;
   const cuePoints = normalizeCuePoints(card?.cue);
   const prompt = toDescribePrompt(card?.topic);
+  const status = document.getElementById('mockStatus');
+  if (status) status.style.display = 'none';
   document.getElementById('cueContent').innerHTML = `
     <div class="cue-topic">
       <div class="cue-cat">${escHtml(card.cat)} · ${escHtml(card.catCn)}</div>
@@ -1495,6 +1526,8 @@ function closeCue() {
   clearInterval(S.prepInt);
   S.prepInt = null;
   document.getElementById('cueFullscreen').classList.remove('show');
+  const status = document.getElementById('mockStatus');
+  if (status && S.mockMode) status.style.display = 'block';
 }
 
 function doPart2() {
@@ -1505,6 +1538,7 @@ function doPart2() {
 }
 
 function startP2Speaking() {
+  updateMockStatus('Part 2 开始作答');
   if (!S.expectingP2Start) return;
   S.expectingP2Start = false;
   clearInterval(S.timerInt);
@@ -1897,6 +1931,7 @@ function stopMic(opts = {}) {
 //  FINISH
 // ================================================================
 async function finishAll() {
+  updateMockStatus('模考结束，正在生成评分与参考答案');
   clearInterval(S.timerInt);
   stopMic({ pushTranscript: true });
   stopSpeaking();
@@ -1982,6 +2017,7 @@ Return ONLY valid JSON (no markdown):
 // ================================================================
 function showResult(r) {
   setMockMode(false);
+  updateMockStatus('');
   showPage('result');
   document.getElementById('resDate').textContent = r.date + ' · AI 评分报告';
   const o=r.overall||6, fl=r.fluency||6, vo=r.vocab||6, gr=r.grammar||6, co=r.coherence||6;
