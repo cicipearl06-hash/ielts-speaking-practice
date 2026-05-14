@@ -483,6 +483,7 @@ body {
       <button class="sidebar-btn" onclick="showTopicPicker()">🎯 选题</button>
       <button class="sidebar-btn" onclick="signOut()" style="color:var(--red);">🚪</button>
       <button class="sidebar-btn" onclick="showSettings()">⚙️</button>
+      <div id="userEmailDisplay" style="display:none;font-size:10px;color:var(--text-dim);padding:4px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="当前账号"></div>
     </div>
   </aside>
 
@@ -561,6 +562,7 @@ body {
             <span class="q-num" id="qNum">问题 1/4</span>
           </div>
           <div class="question-text" id="qText"></div>
+    <button onclick="speakCurrentQuestion()" id="btnSpeak" style="background:var(--bg2);border:1px solid var(--border);color:var(--text-dim);padding:6px 14px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px;">🔊 朗读题目</button>
           <div class="cue-card" id="qCue"></div>
         </div>
 
@@ -894,7 +896,11 @@ function getUserDoc() {
 async function loadDataFromFirestore() {
   if (!auth.currentUser) return;
   const doc = await getUserDoc().get();
-  if (!doc.exists) return;
+  if (!doc.exists) {
+    // First time user - no data yet, that's ok
+    console.log('No existing data, starting fresh');
+    return;
+  }
 
   const d = doc.data();
   S.streak = d.streak || 0;
@@ -1015,6 +1021,11 @@ function showAuthErr(msg) {
 }
 
 function initSpeech() {
+  // Pre-load TTS voices
+  if (window.speechSynthesis) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  }
   if (('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window)) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     S.rec = new SR();
@@ -1034,73 +1045,111 @@ function initSpeech() {
   }
 }
 
+// Text-to-Speech: read question aloud
+function speakQuestion(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'en-US';
+  utter.rate = 0.85;
+  utter.pitch = 1.0;
+  utter.volume = 1.0;
+  // Voices may load async
+  const applyVoice = () => {
+    const voices = window.speechSynthesis.getVoices();
+    const enVoice = voices.find(v => v.lang.startsWith('en') && v.lang.includes('US')) ||
+                    voices.find(v => v.lang.startsWith('en')) ||
+                    voices[0];
+    if (enVoice) utter.voice = enVoice;
+    window.speechSynthesis.speak(utter);
+  };
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) { applyVoice(); }
+  else { window.speechSynthesis.onvoiceschanged = applyVoice; }
+}
+
+function speakCurrentQuestion() {
+  const qtext = document.getElementById('qText');
+  if (qtext) speakQuestion(qtext.textContent.replace(/^\s+/, ''));
+}
+function stopSpeaking() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
 // ================================================================
 //  SIDEBAR
 // ================================================================
 function buildSidebar() {
-  const cats = [
-    { key:'p1', label:'Part 1 · 日常话题', icon:'🎙️' },
-    { key:'people', label:'Part 2 · 人物类', icon:'👤' },
-    { key:'places', label:'Part 2 · 地点类', icon:'📍' },
-    { key:'objects', label:'Part 2 · 物品类', icon:'📦' },
-    { key:'events', label:'Part 2 · 事件类', icon:'🎬' },
-  ];
+  try {
+    const today = fd(new Date());
+    const scroll = document.getElementById('sidebarScroll');
+    if (!scroll) { console.error('sidebarScroll not found'); return; }
 
-  const today = fd(new Date());
-  const scroll = document.getElementById('sidebarScroll');
-  let html = '';
+    const p1done = (S.p1Data || []).filter(t => t.done).length;
+    const p1total = (S.p1Data || []).length;
+    const catCnMap = { People: '人物类', Places: '地点类', Objects: '物品类', Events: '事件类' };
 
-  // P1 section
-  const p1done = S.p1Data.filter(t=>t.done).length;
-  const p1total = S.p1Data.length;
-  html += `<div class="module-section">
-    <div class="module-header open" onclick="toggleMod(this)">
-      <span>🎙️ Part 1 · 日常话题</span>
-      <span class="module-progress"><span class="done">${p1done}</span>/${p1total}</span>
-      <span class="arrow">▸</span>
-    </div>
-    <div class="topic-list">`;
-  S.p1Data.forEach((t,i) => {
-    const st = t.done ? 'done' : (today === (S.customP1&&S.customP1.name===t.name)?today:null) ? 'today' : 'pending';
-    html += `<div class="topic-item" onclick="pickP1('${t.name}')">
-      <span class="dot ${st}"></span>
-      <span class="tname ${t.done?'gray':''}">${t.icon} ${t.name}</span>
-      ${t.done?`<span class="tbadge done">已完成</span>`:''}
-    </div>`;
-  });
-  html += `</div></div>`;
+    let html = '';
 
-  // P2 sections by category
-  const catMap = { People:'people', Places:'places', Objects:'objects', Events:'events' };
-  const catCnMap = { People:'人物类', Places:'地点类', Objects:'物品类', Events:'事件类' };
-  ['People','Places','Objects','Events'].forEach(cat => {
-    const cards = S.p2Data.filter(c=>c.cat===cat);
-    const done = cards.filter(c=>c.done).length;
-    const key = catMap[cat];
+    // Part 1 Section (always expanded)
     html += `<div class="module-section">
-      <div class="module-header" onclick="toggleMod(this)">
-        <span>${catCnMap[cat]}</span>
-        <span class="module-progress"><span class="done">${done}</span>/${cards.length}</span>
+      <div class="module-header open" id="modP1">
+        <span>🎙️ Part 1 · 日常话题</span>
+        <span class="module-progress"><span class="done">${p1done}</span>/${p1total}</span>
         <span class="arrow">▸</span>
       </div>
-      <div class="topic-list">`;
-    cards.forEach(c => {
-      const st = c.done ? 'done' : (S.customP2&&S.customP2.id===c.id) ? 'today' : 'pending';
-      const badge = c.done ? `<span class="tbadge done">${c.score||''}</span>` : (S.customP2&&S.customP2.id===c.id)?'<span class="tbadge today">今日</span>':'';
-      html += `<div class="topic-item" onclick="pickP2(${c.id})">
-        <span class="dot ${st}"></span>
-        <span class="tname ${c.done?'gray':''}">${c.topic}</span>
-        ${badge}
+      <div class="topic-list" id="listP1" style="display:block;">`;
+    (S.p1Data || []).forEach(t => {
+      const status = t.done ? 'done' : (S.customP1 && S.customP1.name === t.name) ? 'today' : 'pending';
+      const grayCls = t.done ? ' gray' : '';
+      const badge = t.done ? `<span class="tbadge done">✓</span>` : '';
+      html += `<div class="topic-item" onclick="pickP1('${(t.name || '').replace(/'/g, "\\'")}')">
+        <span class="dot ${status}"></span>
+        <span class="tname${grayCls}">${t.icon || '🎙️'} ${t.name || ''}</span>${badge}
       </div>`;
     });
     html += `</div></div>`;
-  });
 
-  scroll.innerHTML = html;
-  document.getElementById('sbStreak').textContent = S.streak;
+    // Part 2 Sections
+    ['People', 'Places', 'Objects', 'Events'].forEach(cat => {
+      const cards = (S.p2Data || []).filter(c => c.cat === cat);
+      const done = cards.filter(c => c.done).length;
+      html += `<div class="module-section">
+        <div class="module-header" onclick="toggleMod(this)">
+          <span>${catCnMap[cat] || cat}</span>
+          <span class="module-progress"><span class="done">${done}</span>/${cards.length}</span>
+          <span class="arrow">▸</span>
+        </div>
+        <div class="topic-list">`;
+      cards.forEach(c => {
+        const status = c.done ? 'done' : (S.customP2 && S.customP2.id === c.id) ? 'today' : 'pending';
+        const grayCls = c.done ? ' gray' : '';
+        const score = c.done && c.score ? c.score : '';
+        const badge = c.done ? `<span class="tbadge done">${score}</span>` : '';
+        html += `<div class="topic-item" onclick="pickP2(${c.id})">
+          <span class="dot ${status}"></span>
+          <span class="tname${grayCls}">${c.topic || ''}</span>${badge}
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+
+    scroll.innerHTML = html;
+    const sbStreakEl = document.getElementById('sbStreak');
+    if (sbStreakEl) sbStreakEl.textContent = S.streak;
+  } catch(e) {
+    console.error('buildSidebar error:', e);
+  }
 }
 
 function toggleMod(el) {
+  el.classList.toggle('open');
+  const list = el.nextElementSibling;
+  if (list && list.classList.contains('topic-list')) {
+    list.style.display = el.classList.contains('open') ? 'block' : 'none';
+  }
+}
+(el) {
   el.classList.toggle('open');
 }
 
@@ -1224,19 +1273,27 @@ function showPage(p) {
 //  EXAM FLOW
 // ================================================================
 function showP1Q() {
+  stopSpeaking();
   const q = S.p1Qs[S.p1Idx];
+  if (!q) { toast('题目加载失败，请刷新重试', 'err'); return; }
   S.curTranscript = '';
-  document.getElementById('transcriptBox').innerHTML = '<span class="placeholder">您的回答将实时显示...</span>';
-  document.getElementById('qBadge').textContent = 'PART 1';
-  document.getElementById('qBadge').className = 'q-badge part1';
-  document.getElementById('qNum').textContent = `${S.p1Idx+1} / ${S.p1Qs.length}`;
-  document.getElementById('qText').innerHTML = q;
-  document.getElementById('qCue').style.display = 'none';
-  document.getElementById('timerWrap').style.display = '';
-  document.getElementById('btnNext').textContent = '下一题 ▶';
-  document.getElementById('btnNext').disabled = false;
-  document.getElementById('btnNext').className = 'btn primary';
+  const tb = document.getElementById('transcriptBox');
+  if (tb) tb.innerHTML = '<span class="placeholder">您的回答将实时显示...</span>';
+  const badge = document.getElementById('qBadge');
+  if (badge) { badge.textContent = 'PART 1'; badge.className = 'q-badge part1'; }
+  const qnum = document.getElementById('qNum');
+  if (qnum) qnum.textContent = `${S.p1Idx+1} / ${S.p1Qs.length}`;
+  const qtext = document.getElementById('qText');
+  if (qtext) qtext.innerHTML = q;
+  const qcue = document.getElementById('qCue');
+  if (qcue) qcue.style.display = 'none';
+  const timerWrap = document.getElementById('timerWrap');
+  if (timerWrap) timerWrap.style.display = '';
+  const btnNext = document.getElementById('btnNext');
+  if (btnNext) { btnNext.textContent = '下一题 ▶'; btnNext.disabled = false; btnNext.className = 'btn primary'; }
   updateProg('part1');
+  // Read question aloud
+  speakQuestion(q);
   startTimer(S.settings.timerSec, () => {
     stopMic();
     autoAdv();
@@ -1262,19 +1319,26 @@ function showP2Q() {
 }
 
 function showP3Q() {
+  stopSpeaking();
   const q = S.p3Qs[S.p3Idx];
+  if (!q) { toast('题目加载失败，请刷新重试', 'err'); return; }
   S.curTranscript = '';
-  document.getElementById('transcriptBox').innerHTML = '<span class="placeholder">您的回答将实时显示...</span>';
-  document.getElementById('qBadge').textContent = 'PART 3';
-  document.getElementById('qBadge').className = 'q-badge part3';
-  document.getElementById('qNum').textContent = `${S.p3Idx+1} / ${S.p3Qs.length}`;
-  document.getElementById('qText').innerHTML = q;
-  document.getElementById('qCue').style.display = 'none';
-  document.getElementById('timerWrap').style.display = '';
-  document.getElementById('btnNext').textContent = '下一题 ▶';
-  document.getElementById('btnNext').disabled = false;
-  document.getElementById('btnNext').className = 'btn primary';
+  const tb = document.getElementById('transcriptBox');
+  if (tb) tb.innerHTML = '<span class="placeholder">您的回答将实时显示...</span>';
+  const badge = document.getElementById('qBadge');
+  if (badge) { badge.textContent = 'PART 3'; badge.className = 'q-badge part3'; }
+  const qnum = document.getElementById('qNum');
+  if (qnum) qnum.textContent = `${S.p3Idx+1} / ${S.p3Qs.length}`;
+  const qtext = document.getElementById('qText');
+  if (qtext) qtext.innerHTML = q;
+  const qcue = document.getElementById('qCue');
+  if (qcue) qcue.style.display = 'none';
+  const timerWrap = document.getElementById('timerWrap');
+  if (timerWrap) timerWrap.style.display = '';
+  const btnNext = document.getElementById('btnNext');
+  if (btnNext) { btnNext.textContent = '下一题 ▶'; btnNext.disabled = false; btnNext.className = 'btn primary'; }
   updateProg('part3');
+  speakQuestion(q);
   startTimer(S.settings.timerSec, () => {
     stopMic();
     autoAdvP3();
