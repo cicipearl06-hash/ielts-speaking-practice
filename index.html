@@ -574,19 +574,32 @@ function saveLocalUserState(email, data) {
   localStorage.setItem(getUserDataKey(email), JSON.stringify(data));
 }
 
+function toSafeNonNegativeInt(value, fallback = 0) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return fallback;
+  return Math.floor(num);
+}
+
 function resetRuntimeStateFromData(data) {
-  S.streak = data.streak || 0;
-  S.totalPractice = data.totalPractice || 0;
-  S.history = Array.isArray(data.history) ? data.history : [];
-  S.completedDays = data.completedDays || {};
-  S.settings = { apiKey: localStorage.getItem(LOCAL_API_KEY) || '', baseUrl: 'https://api.anthropic.com', sound: true, timerSec: 20, ...(data.settings || {}) };
+  const source = (data && typeof data === 'object') ? data : {};
+  const settings = (source.settings && typeof source.settings === 'object') ? source.settings : {};
+
+  S.streak = toSafeNonNegativeInt(source.streak, 0);
+  S.totalPractice = toSafeNonNegativeInt(source.totalPractice, 0);
+  S.history = Array.isArray(source.history) ? source.history.filter(x => x && typeof x === 'object') : [];
+  S.completedDays = (source.completedDays && typeof source.completedDays === 'object') ? source.completedDays : {};
+  S.settings = { apiKey: localStorage.getItem(LOCAL_API_KEY) || '', baseUrl: 'https://api.anthropic.com', sound: true, timerSec: 20, ...settings };
+  S.settings.timerSec = Math.max(10, Math.min(60, toSafeNonNegativeInt(S.settings.timerSec, 20)));
+  S.settings.baseUrl = (typeof S.settings.baseUrl === 'string' && S.settings.baseUrl.trim()) ? S.settings.baseUrl.trim() : 'https://api.anthropic.com';
+  S.settings.sound = S.settings.sound !== false;
+  S.settings.apiKey = typeof S.settings.apiKey === 'string' ? S.settings.apiKey : '';
   S.p1Data = P1_TOPICS.map(t => ({ ...t, done: false }));
   S.p2Data = P2_CARDS.map(c => ({ id: c.id, cat: c.cat, topic: c.topic, done: false, score: null }));
-  (data.p1_done || []).forEach(saved => {
+  (Array.isArray(source.p1_done) ? source.p1_done : []).forEach(saved => {
     const item = S.p1Data.find(x => x.name === saved.name);
     if (item) item.done = !!saved.done;
   });
-  (data.p2_done || []).forEach(saved => {
+  (Array.isArray(source.p2_done) ? source.p2_done : []).forEach(saved => {
     const item = S.p2Data.find(x => x.id === saved.id);
     if (item) {
       item.done = !!saved.done;
@@ -599,15 +612,44 @@ function currentUserEmail() {
   return S.user?.email || '';
 }
 
+function forceShowHome() {
+  const home = document.getElementById('homePage');
+  const exam = document.getElementById('examPage');
+  const trans = document.getElementById('transitionPage');
+  const result = document.getElementById('resultPage');
+  if (home) home.style.display = '';
+  if (exam) exam.style.display = 'none';
+  if (trans) trans.style.display = 'none';
+  if (result) result.style.display = 'none';
+}
+
+function ensureOnePageVisible() {
+  const pages = ['homePage', 'examPage', 'transitionPage', 'resultPage']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  if (!pages.length) return;
+  const hasVisible = pages.some(el => getComputedStyle(el).display !== 'none');
+  if (!hasVisible) forceShowHome();
+}
+
 function openAppForCurrentUser() {
   document.getElementById('authOverlay').classList.add('auth-closed');
   document.getElementById('appShell').classList.add('visible');
-  const data = loadLocalUserState(currentUserEmail());
-  resetRuntimeStateFromData(data);
-  buildSidebar();
-  renderHome();
-  updateTBStats();
-  initSpeech();
+  try {
+    const data = loadLocalUserState(currentUserEmail());
+    resetRuntimeStateFromData(data);
+    showPage('home');
+    buildSidebar();
+    renderHome();
+    updateTBStats();
+    initSpeech();
+  } catch (err) {
+    console.error('openAppForCurrentUser failed:', err);
+    forceShowHome();
+    const info = document.getElementById('todaySetInfo');
+    if (info) info.innerHTML = '页面初始化异常，已自动回到首页。<br>请刷新后重试，如仍异常请先退出后重新登录。';
+  }
+  ensureOnePageVisible();
 }
 
 // ================================================================
@@ -875,13 +917,17 @@ function renderHome() {
   const done = !!S.completedDays[today];
   const set = getTodayPracticeSet();
   document.getElementById('homeDate').textContent = `${now.getMonth()+1}月${now.getDate()}日 · 星期${days[now.getDay()]}`;
-  document.getElementById('homeDay').textContent = `第 ${S.totalPractice + 1} 天练习`;
+  document.getElementById('homeDay').textContent = `第 ${toSafeNonNegativeInt(S.totalPractice, 0) + 1} 天练习`;
   const btn = document.getElementById('btnStart');
   btn.textContent = done ? '✅ 今日已完成 · 查看报告' : '▶ 开始今日练习';
   btn.className = 'btn-start' + (done ? ' done' : '');
   const setInfo = document.getElementById('todaySetInfo');
-  if (setInfo && set.p1 && set.p2) {
-    setInfo.innerHTML = `今日完整套题：Part 1「${escHtml(set.p1.name)}」 · Part 2「${escHtml(set.p2.topic)}」<br>Part 3 自动跟随 Part 2 延伸问题`;
+  if (setInfo) {
+    if (set && set.p1 && set.p2) {
+      setInfo.innerHTML = `今日完整套题：Part 1「${escHtml(set.p1.name)}」 · Part 2「${escHtml(set.p2.topic)}」<br>Part 3 自动跟随 Part 2 延伸问题`;
+    } else {
+      setInfo.textContent = '题库加载中，请刷新页面重试。';
+    }
   }
 
   const avg = S.history.length ? Math.round(S.history.reduce((a,h) => a+(h.overall||0), 0)/S.history.length*10)/10 : 0;
@@ -945,16 +991,20 @@ function pickP2(id) {
 }
 
 function getTodayPracticeSet() {
-  const todayIdx = Math.max(0, S.totalPractice);
+  const p1Len = P1_TOPICS.length;
+  const p2Len = P2_CARDS.length;
+  if (!p1Len || !p2Len) return { p1: null, p2: null, setDay: 1 };
+  const todayIdx = toSafeNonNegativeInt(S.totalPractice, 0);
   if (DAILY_SETS.length) {
-    const set = DAILY_SETS[todayIdx % DAILY_SETS.length];
-    const p1 = P1_TOPICS.find(t => t.name === set.part1Name) || P1_TOPICS[todayIdx % P1_TOPICS.length];
-    const p2 = P2_CARDS.find(c => c.id === set.part2Id) || P2_CARDS[todayIdx % P2_CARDS.length];
-    return { p1, p2, setDay: set.day };
+    const set = DAILY_SETS[todayIdx % DAILY_SETS.length] || {};
+    const p1 = P1_TOPICS.find(t => t.name === set.part1Name) || P1_TOPICS[todayIdx % p1Len] || P1_TOPICS[0];
+    const p2 = P2_CARDS.find(c => c.id === set.part2Id) || P2_CARDS[todayIdx % p2Len] || P2_CARDS[0];
+    const setDay = toSafeNonNegativeInt(set.day, todayIdx + 1) || (todayIdx + 1);
+    return { p1, p2, setDay };
   }
   return {
-    p1: P1_TOPICS[todayIdx % P1_TOPICS.length],
-    p2: P2_CARDS[todayIdx % P2_CARDS.length],
+    p1: P1_TOPICS[todayIdx % p1Len] || P1_TOPICS[0],
+    p2: P2_CARDS[todayIdx % p2Len] || P2_CARDS[0],
     setDay: todayIdx + 1,
   };
 }
@@ -1009,9 +1059,11 @@ function showPage(p) {
     trans: document.getElementById('transitionPage'),
     result: document.getElementById('resultPage'),
   };
+  const page = map[p] ? p : 'home';
   Object.keys(map).forEach(key => {
-    if (map[key]) map[key].style.display = key === p ? '' : 'none';
+    if (map[key]) map[key].style.display = key === page ? '' : 'none';
   });
+  ensureOnePageVisible();
 }
 
 // ================================================================
@@ -1674,9 +1726,23 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+let runtimeGuardShown = false;
+function handleRuntimeCrash(source, err) {
+  console.error(`[runtime:${source}]`, err);
+  if (runtimeGuardShown) return;
+  runtimeGuardShown = true;
+  try {
+    forceShowHome();
+    const info = document.getElementById('todaySetInfo');
+    if (info) info.innerHTML = '检测到脚本异常，已切回首页。<br>请先强制刷新；若仍失败请点击右下角退出后重新登录。';
+  } catch (_) {}
+}
+
 // ================================================================
 //  BOOT
 // ================================================================
+window.addEventListener('error', e => handleRuntimeCrash('error', e?.error || e?.message || e));
+window.addEventListener('unhandledrejection', e => handleRuntimeCrash('promise', e?.reason || e));
 window.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
