@@ -503,6 +503,7 @@ body {
         <div class="score-grid" id="scoreGrid"></div>
         <div class="score-bars" id="scoreBars"></div>
         <div id="refContainer"></div>
+        <div id="recordingExport" style="margin-top:14px;"></div>
         <div style="margin-top:20px;">
           <button class="btn-start" onclick="backHome()">返回首页</button>
         </div>
@@ -798,6 +799,15 @@ let S = {
   customP1: null, customP2: null,
   transcripts: [],
   isRec: false, rec: null, curTranscript: '',
+  mediaStream: null,
+  mediaRecorder: null,
+  mediaChunks: [],
+  clips: [],
+  clipSeq: 0,
+  clipActive: null,
+  clipDownloaded: false,
+  clipSessionDate: '',
+  mediaMimeType: '',
   recFinal: '',
   recInterim: '',
   timerSec: 20, timerInt: null,
@@ -1301,6 +1311,9 @@ async function startTodayPractice() {
   S.p1Idx = 0;
   S.p3Idx = 0;
   S.transcripts = [];
+  clearCurrentRecordingSession();
+  releaseMediaInput();
+  S.clipSessionDate = today;
   S.expectingP2Start = false;
   S.autoTimerPending = false;
   S.lastSavedKey = '';
@@ -1840,12 +1853,288 @@ function speakCurrentQ() {
   if (el) speakQuestion(el.textContent.replace(/^\s+/, ''));
 }
 
+function normalizeAudioExt(mimeType) {
+  const m = String(mimeType || '').toLowerCase();
+  if (m.includes('webm')) return 'webm';
+  if (m.includes('ogg')) return 'ogg';
+  if (m.includes('mp4') || m.includes('m4a') || m.includes('aac')) return 'm4a';
+  return 'webm';
+}
+
+function pickRecorderMimeType() {
+  if (!window.MediaRecorder) return '';
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+  ];
+  for (const mime of candidates) {
+    try {
+      if (typeof MediaRecorder.isTypeSupported !== 'function' || MediaRecorder.isTypeSupported(mime)) return mime;
+    } catch (_) {}
+  }
+  return '';
+}
+
+function questionMetaForClip() {
+  if (S.part === 1) {
+    return {
+      part: 1,
+      partKey: 'part1',
+      index: S.p1Idx + 1,
+      total: S.p1Qs.length,
+      question: S.p1Qs[S.p1Idx] || '',
+      key: S.curQuestionKey || `P1-${S.p1Idx}`,
+    };
+  }
+  if (S.part === 2) {
+    const cue = normalizeCuePoints(S.customP2?.cue);
+    return {
+      part: 2,
+      partKey: 'part2',
+      index: 1,
+      total: 1,
+      question: buildPart2TaskText(S.customP2, cue),
+      key: S.curQuestionKey || 'P2-0',
+    };
+  }
+  return {
+    part: 3,
+    partKey: 'part3',
+    index: S.p3Idx + 1,
+    total: S.p3Qs.length,
+    question: S.p3Qs[S.p3Idx] || '',
+    key: S.curQuestionKey || `P3-${S.p3Idx}`,
+  };
+}
+
+function revokeClipUrls() {
+  for (const clip of S.clips || []) {
+    if (clip?.url) {
+      try { URL.revokeObjectURL(clip.url); } catch (_) {}
+    }
+  }
+}
+
+function releaseMediaInput() {
+  if (S.mediaStream && typeof S.mediaStream.getTracks === 'function') {
+    for (const track of S.mediaStream.getTracks()) {
+      try { track.stop(); } catch (_) {}
+    }
+  }
+  S.mediaStream = null;
+  S.mediaRecorder = null;
+  S.mediaChunks = [];
+  S.clipActive = null;
+}
+
+function clearCurrentRecordingSession() {
+  revokeClipUrls();
+  S.clips = [];
+  S.clipSeq = 0;
+  S.mediaChunks = [];
+  S.clipActive = null;
+  S.clipDownloaded = false;
+  S.clipSessionDate = '';
+  const box = document.getElementById('recordingExport');
+  if (box) box.innerHTML = '';
+}
+
+function waitForClipFlush(timeoutMs = 1600) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      const recorder = S.mediaRecorder;
+      const settled = !S.clipActive && (!recorder || recorder.state === 'inactive');
+      if (settled || (Date.now() - start) >= timeoutMs) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 40);
+  });
+}
+
+async function ensureMediaRecorderReady() {
+  if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return false;
+  }
+  if (S.mediaRecorder && S.mediaStream) return true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const preferredMime = pickRecorderMimeType();
+    let recorder = null;
+    try {
+      recorder = preferredMime ? new MediaRecorder(stream, { mimeType: preferredMime }) : new MediaRecorder(stream);
+    } catch (_) {
+      recorder = new MediaRecorder(stream);
+    }
+    S.mediaStream = stream;
+    S.mediaRecorder = recorder;
+    S.mediaMimeType = recorder.mimeType || preferredMime || '';
+    recorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) S.mediaChunks.push(event.data);
+    };
+    recorder.onstop = () => {
+      const active = S.clipActive;
+      const chunks = S.mediaChunks.slice();
+      S.mediaChunks = [];
+      S.clipActive = null;
+      if (!active || !chunks.length) return;
+      const mimeType = S.mediaMimeType || recorder.mimeType || chunks[0]?.type || 'audio/webm';
+      const ext = normalizeAudioExt(mimeType);
+      const blob = new Blob(chunks, { type: mimeType });
+      const clipNo = String(++S.clipSeq).padStart(2, '0');
+      const qNo = String(active.index || 1).padStart(2, '0');
+      const dateTag = fd(new Date()).replace(/-/g, '');
+      const fileName = `ielts_${dateTag}_${active.partKey}_q${qNo}_${clipNo}.${ext}`;
+      const transcript = (active.transcript || '').trim() || '[无回答]';
+      S.clips.push({
+        id: clipNo,
+        fileName,
+        mimeType,
+        part: active.part,
+        partKey: active.partKey,
+        index: active.index,
+        total: active.total,
+        key: active.key,
+        question: active.question,
+        startedAt: active.startedAt,
+        endedAt: new Date().toISOString(),
+        durationSec: Math.max(1, Math.round((Date.now() - active.startedMs) / 1000)),
+        transcript,
+        blob,
+        url: URL.createObjectURL(blob),
+      });
+    };
+    return true;
+  } catch (err) {
+    console.warn('MediaRecorder init failed:', err);
+    return false;
+  }
+}
+
+async function startClipRecording() {
+  const ok = await ensureMediaRecorderReady();
+  if (!ok || !S.mediaRecorder) return false;
+  if (S.mediaRecorder.state !== 'inactive') {
+    try { S.mediaRecorder.stop(); } catch (_) {}
+  }
+  S.mediaChunks = [];
+  const meta = questionMetaForClip();
+  S.clipActive = {
+    ...meta,
+    startedAt: new Date().toISOString(),
+    startedMs: Date.now(),
+  };
+  try {
+    S.mediaRecorder.start();
+    return true;
+  } catch (err) {
+    S.clipActive = null;
+    console.warn('MediaRecorder start failed:', err);
+    return false;
+  }
+}
+
+function stopClipRecording() {
+  if (S.clipActive) {
+    S.clipActive.transcript = `${S.recFinal || ''} ${S.recInterim || ''}`.trim() || S.curTranscript || '';
+  }
+  if (!S.mediaRecorder) return;
+  if (S.mediaRecorder.state === 'inactive') return;
+  try { S.mediaRecorder.stop(); } catch (_) {}
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, 60);
+}
+
+function buildRecordingManifest() {
+  return {
+    generatedAt: new Date().toISOString(),
+    candidate: currentUserEmail() || '',
+    totalClips: S.clips.length,
+    clips: S.clips.map(c => ({
+      fileName: c.fileName,
+      mimeType: c.mimeType,
+      part: c.part,
+      questionIndex: c.index,
+      questionTotal: c.total,
+      question: c.question,
+      durationSec: c.durationSec,
+      transcript: c.transcript,
+      startedAt: c.startedAt,
+      endedAt: c.endedAt,
+    })),
+  };
+}
+
+function downloadAllRecordings() {
+  if (!S.clips.length) {
+    toast('暂无可下载录音', 'err');
+    return;
+  }
+  const dateTag = (S.clipSessionDate || fd(new Date())).replace(/-/g, '');
+  const manifest = buildRecordingManifest();
+  downloadBlob(new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }), `ielts_${dateTag}_recordings_manifest.json`);
+  S.clips.forEach((clip, idx) => {
+    setTimeout(() => downloadBlob(clip.blob, clip.fileName), 180 * (idx + 1));
+  });
+  S.clipDownloaded = true;
+  toast('已触发录音下载（如被拦截请允许多文件下载）', 'ok');
+}
+
+function downloadClipAt(index) {
+  const clip = S.clips[index];
+  if (!clip) return;
+  downloadBlob(clip.blob, clip.fileName);
+}
+
+function renderRecordingExport() {
+  const box = document.getElementById('recordingExport');
+  if (!box) return;
+  if (!S.clips.length) {
+    box.innerHTML = '<div class="ref-block"><h4>🎙️ 录音文件</h4><div class="ref-a">本次未检测到可保存录音（请检查浏览器麦克风权限）。</div></div>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="ref-block">
+      <h4>🎙️ 本次录音文件（${S.clips.length} 段）</h4>
+      <div class="ref-a" style="margin-bottom:10px;">
+        每题音频已保存为独立文件。你可以下载全部录音及清单（manifest），用于回听或归档。
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn" onclick="downloadAllRecordings()">⬇️ 下载全部录音</button>
+      </div>
+      <div class="ref-comment" style="margin-bottom:10px;">若浏览器拦截多文件下载，请在地址栏允许“自动下载”。</div>
+      <div class="ref-a" style="display:grid;gap:8px;">
+        ${S.clips.map((clip, idx) => `
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;background:var(--bg2);padding:10px;border:1px solid var(--border);border-radius:10px;">
+            <span>${escHtml(`Part ${clip.part} · Q${clip.index}/${clip.total} · ${clip.durationSec}s`)}</span>
+            <button class="btn" onclick="downloadClipAt(${idx})">下载</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
 function toggleMic() {
   if (!S.hasStarted) {
     toast('请先点击“开始今日练习”', 'err');
     return;
   }
-  if (!S.rec) { toast('请使用 Chrome 浏览器以获得语音识别支持', 'err'); return; }
+  if (!S.rec && !window.MediaRecorder) { toast('请使用 Chrome 浏览器以获得录音能力', 'err'); return; }
   if (S.speechInProgress) {
     toast('请等题目朗读结束后再录音', 'err');
     return;
@@ -1853,8 +2142,33 @@ function toggleMic() {
   if (S.isRec) stopMic(); else startMic();
 }
 
-function startMic() {
+async function startMic() {
   if (S.part !== 1 && S.part !== 2 && S.part !== 3) return;
+  if (S.isRec) return;
+
+  S.isRec = true;
+  S.curTranscript = '';
+  S.recFinal = '';
+  S.recInterim = '';
+
+  const clipOk = await startClipRecording();
+  const canSpeechRec = !!S.rec;
+  let srStarted = false;
+  if (canSpeechRec) {
+    try {
+      S.rec.start();
+      srStarted = true;
+    } catch (err) {
+      console.warn('SpeechRecognition start failed:', err);
+    }
+  }
+
+  if (!clipOk && !srStarted) {
+    S.isRec = false;
+    toast('麦克风启动失败，请检查权限后重试', 'err');
+    return;
+  }
+
   if (S.autoTimerPending) {
     const sec = S.part === 2 ? MOCK_STANDARD.p2AnswerSec : S.settings.timerSec;
     const onEnd = S.part === 1
@@ -1891,14 +2205,6 @@ function startMic() {
     });
   }
 
-  S.isRec = true; S.curTranscript = '';
-  S.recFinal = '';
-  S.recInterim = '';
-  try { S.rec.start(); } catch (err) {
-    S.isRec = false;
-    toast('麦克风启动失败，请重试', 'err');
-    return;
-  }
   document.getElementById('btnMic').classList.add('recording');
   const h = document.getElementById('recHint');
   h.textContent = '🔴 录音中...'; h.classList.add('on');
@@ -1909,13 +2215,16 @@ function stopMic(opts = {}) {
   const { pushTranscript = true } = opts;
   if (!S.isRec) {
     if (pushTranscript && S.curQuestionKey && S.lastSavedKey !== S.curQuestionKey) {
-      S.transcripts.push((S.curTranscript || '').trim() || '[无回答]');
+      const merged = `${S.recFinal || ''} ${S.recInterim || ''}`.trim();
+      const fallback = (S.curTranscript || '').trim();
+      S.transcripts.push(merged || fallback || '[无回答]');
       S.lastSavedKey = S.curQuestionKey;
     }
     return;
   }
   S.isRec = false;
-  try { S.rec.stop(); } catch(e) {}
+  try { if (S.rec) S.rec.stop(); } catch(e) {}
+  stopClipRecording();
   document.getElementById('btnMic').classList.remove('recording');
   const h = document.getElementById('recHint');
   h.textContent = '点击开始录音'; h.classList.remove('on');
@@ -1935,6 +2244,8 @@ async function finishAll() {
   clearInterval(S.timerInt);
   stopMic({ pushTranscript: true });
   stopSpeaking();
+  await waitForClipFlush();
+  releaseMediaInput();
   S.hasStarted = false;
   showLoad('正在生成评分报告...');
 
@@ -1976,6 +2287,10 @@ async function finishAll() {
   updateTBStats();
   hideLoad();
   showResult(entry);
+  renderRecordingExport();
+  setTimeout(() => {
+    if (S.clips.length) downloadAllRecordings();
+  }, 260);
 }
 
 // ================================================================
@@ -2034,6 +2349,12 @@ function showResult(r) {
     <div class="ref-block"><h4>📝 Part 1 参考答案 ${r.p1Topic?'· '+r.p1Topic:''}</h4><div class="ref-a">${r.p1ref||''}</div>${r.p1fb?`<div class="ref-comment">💬 ${r.p1fb}</div>`:''}</div>
     <div class="ref-block"><h4>📝 Part 2 参考答案 · ${r.p2Topic||''}</h4><div class="ref-a">${r.p2ref||''}</div>${r.p2fb?`<div class="ref-comment">💬 ${r.p2fb}</div>`:''}</div>
     <div class="ref-block"><h4>📝 Part 3 参考答案</h4><div class="ref-a">${r.p3ref||''}</div>${r.p3fb?`<div class="ref-comment">💬 ${r.p3fb}</div>`:''}</div>`;
+  const box = document.getElementById('recordingExport');
+  if (box) {
+    const canShowClips = !!(r?.date && S.clipSessionDate && r.date === S.clipSessionDate && S.clips.length);
+    if (canShowClips) renderRecordingExport();
+    else box.innerHTML = '';
+  }
 }
 
 function showHistReport(date) {
