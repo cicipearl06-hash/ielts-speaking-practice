@@ -54,8 +54,15 @@ body {
 
 /* ===== LAYOUT ===== */
 .app-shell {
-  display: flex;
+  display: none;
   min-height: 100vh;
+}
+.app-shell.visible,
+.app-shell.show {
+  display: flex !important;
+}
+#authOverlay {
+  display: none;
 }
 
 /* ===== SIDEBAR ===== */
@@ -437,7 +444,7 @@ body {
 <body>
 
 <!-- AUTH OVERLAY -->
-<div id="authOverlay" style="display:none; position:fixed;inset:0;z-index:999;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;">
+<div id="authOverlay" class="auth-open" style="position:fixed;inset:0;z-index:999;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;">
   <div style="max-width:400px;width:100%;text-align:center;">
     <div style="font-size:48px;margin-bottom:16px;">🗣️</div>
     <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">雅思口语<span style="color:var(--gold)">每日打卡</span></h1>
@@ -461,7 +468,7 @@ body {
   </div>
 </div>
 
-<div class="app-shell" id="appShell" style="display:none;">
+<div class="app-shell" id="appShell">
 
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
@@ -958,7 +965,7 @@ function initAuth() {
     if (user) {
       // Logged in
       document.getElementById('authOverlay').style.display = 'none';
-      document.getElementById('appShell').style.display = '';
+      document.getElementById('appShell').style.display = 'flex';
       showLoad('正在同步数据...');
       try {
         await loadDataFromFirestore();
