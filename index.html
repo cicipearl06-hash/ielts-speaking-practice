@@ -376,6 +376,7 @@ body {
           <div class="today-date" id="homeDate"></div>
           <div class="today-day" id="homeDay"></div>
           <button class="btn-start" id="btnStart" onclick="startTodayPractice()">▶ 开始今日练习</button>
+          <div id="todaySetInfo" style="margin-top:12px;color:var(--text-dim);font-size:12px;line-height:1.7;"></div>
           <div class="stats-row" id="statsRow"></div>
         </div>
         <div class="cal-section">
@@ -526,6 +527,7 @@ body {
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<script src="question-bank-2026-05-08.js"></script>
 <script>
 // ================================================================
 //  LOCAL AUTH + STORAGE
@@ -611,73 +613,30 @@ function openAppForCurrentUser() {
 // ================================================================
 //  DATA
 // ================================================================
-const P1_TOPICS = [
-  { name:"Hometown", icon:"🏠", qs:["Where do you come from?","What do you like about your hometown?","Is it a big city or a small place?","Has your hometown changed a lot recently?"] },
-  { name:"Study", icon:"📚", qs:["Do you work or are you a student?","What subjects do you study?","Do you like your major?","What is the most exciting thing about your major?"] },
-  { name:"Work", icon:"💼", qs:["What work do you do?","Do you like your job?","How long have you been at this job?","What technology do you use at work?"] },
-  { name:"Accommodation", icon:"🏢", qs:["Do you live in a house or a flat?","Who do you live with?","What do you like about where you live?","Do you live in a noisy or a quiet area?"] },
-  { name:"Teachers", icon:"👨‍🏫", qs:["Do you have a favourite teacher?","What makes a good teacher?","Do you want to be a teacher in the future?","What qualities does a good teacher have?"] },
-  { name:"Parks", icon:"🌳", qs:["Do you often go to parks?","What do you usually do in a park?","Is there a park near your home?","Do you think parks are important for a city?"] },
-  { name:"Watch", icon:"⌚", qs:["Do you wear a watch?","Why do some people wear watches?","What kind of watch do you like?","Is a watch still necessary today?"] },
-  { name:"Headphones", icon:"🎧", qs:["Do you use headphones? How often?","What type of headphones do you usually use?","When do you use headphones?","Have you ever bought headphones as a gift?"] },
-  { name:"Clothing", icon:"👕", qs:["Do you care about what you wear?","What is your favourite type of clothing?","Do you prefer comfortable or fashionable clothes?","Are there traditional clothes in your country?"] },
-  { name:"Music", icon:"🎵", qs:["Do you like music?","What kind of music do you like?","Do you play any musical instruments?","Do you often listen to music alone or with friends?"] },
-  { name:"Singing", icon:"🎤", qs:["Do you like singing?","Do you sing in private or in public?","Have you ever learned to sing formally?","What kind of songs do you like to sing?"] },
-  { name:"Science", icon:"🔬", qs:["Do you like science?","Did you study science at school?","Do you think science is important in daily life?","What scientific discovery has changed the world?"] },
-  { name:"Shopping", icon:"🛒", qs:["Do you like shopping?","Do you prefer shopping online or in stores?","How often do you go shopping?","What do you usually buy?"] },
-  { name:"Tidiness", icon:"🧹", qs:["Are you a tidy person?","Do you prefer to keep your room tidy or messy?","Did your parents teach you to be tidy?","Do you think it is important to be tidy?"] },
-  { name:"Social Media", icon:"📱", qs:["Do you use social media?","Which social media platform do you use most?","How much time do you spend on social media?","Do you think social media is good for society?"] },
-  { name:"Food", icon:"🍜", qs:["What is your favourite food?","Can you cook?","Do you prefer eating at home or eating out?","What food is popular in your country?"] },
-  { name:"Hobby", icon:"🎨", qs:["What is your hobby?","How did you develop this hobby?","Do you share this hobby with friends?","Do you think hobbies are important?"] },
-  { name:"Childhood", icon:"🧸", qs:["What did you like to do when you were a child?","Did you play with other children nearby?","What was your favourite game as a child?","Do children play more outdoors or indoors nowadays?"] },
-  { name:"Morning", icon:"🌅", qs:["What do you usually do in the morning?","Do you have a morning routine?","Do you prefer mornings or evenings?","What is your ideal morning like?"] },
-  { name:"Reading", icon:"📖", qs:["Do you like reading?","What kind of books do you like to read?","Do you prefer digital or physical books?","Should children read more books?"] },
-  { name:"Weather", icon:"☀️", qs:["What is the weather like in your city?","Do you prefer summer or winter?","Does weather affect your mood?","What do you usually do on rainy days?"] },
-  { name:"Photos", icon:"📷", qs:["Do you like taking photos?","Do you prefer taking photos of people or scenery?","Do you share photos on social media?","Do you keep photo albums?"] },
-  { name:"Sleep", icon:"😴", qs:["How many hours do you sleep each night?","Do you have a consistent sleep schedule?","Do you take naps during the day?","What do you do when you can't sleep?"] },
-  { name:"Family", icon:"👨‍👩‍👧", qs:["Do you live with your family?","How often do you see your family?","What do you usually do with your family?","Do you want to live near your family in the future?"] },
-];
+const Q_BANK = window.IELTS_QUESTION_BANK_2026_05_08 || null;
+const P1_TOPICS = Q_BANK?.part1Topics || [];
+const P2_CARDS = Q_BANK?.part2Cards || [];
+const DAILY_SETS = Q_BANK?.dailySets || [];
 
-const P2_CARDS = [
-  { id:0, cat:"People", catCn:"人物", topic:"A Childhood Friend", cue:["who he/she is","where and how you met each other","what you often did together","what made you like him/her"], p3:["Do you still keep in touch with childhood friends?","How important is childhood friendship?","Has technology changed people's friendships?"] },
-  { id:1, cat:"People", catCn:"人物", topic:"A Person Who Loves to Grow Plants", cue:["who this person is","what plants he/she grows","how he/she grows them","why he/she loves growing plants"], p3:["What are the advantages of growing plants at home?","Do many people grow vegetables at home in your country?","Why do some prefer growing their own food?"] },
-  { id:2, cat:"People", catCn:"人物", topic:"A Successful Businessperson", cue:["who this person is","how you got to know him/her","why and how he/she started the business","why you think the business is successful"], p3:["Why do some people start their own business?","Should government support startups?","What makes a business successful vs fail?"] },
-  { id:3, cat:"Places", catCn:"地点", topic:"A Tall Building", cue:["what it is used for","where it is","what it looks like","why you like/dislike it"], p3:["Are there many tall buildings in your country?","Why are places designed differently?","Do tall buildings affect city life?"] },
-  { id:4, cat:"Places", catCn:"地点", topic:"A Quiet Place", cue:["where it is","how you knew it","how often you go there","what you do there","how you feel about it"], p3:["Is it easy to find quiet places in your country?","How do people spend leisure time?","Why do old people prefer quiet places?"] },
-  { id:5, cat:"Places", catCn:"地点", topic:"Your Favourite City", cue:["where it is","how you found out about it","when you visited it","why it is your favourite city"], p3:["Urban vs rural life for young people?","How do people choose a travel destination?","Is a tourist city also a good place to live?"] },
-  { id:6, cat:"Places", catCn:"地点", topic:"A Place You Have Travelled to", cue:["what it is","where it is","what you saw and did there","why you recommend it"], p3:["Where do people often go for holidays?","Ideal holiday length?","How do people plan holidays?"] },
-  { id:7, cat:"Objects", catCn:"物品", topic:"A Food on Special Occasions", cue:["what it is","what the occasion is","how it is cooked/made","why people eat it on that occasion"], p3:["Why special foods on special occasions?","Everyday food vs festival food?","Food differences today vs the past?"] },
-  { id:8, cat:"Objects", catCn:"物品", topic:"An Important Old Thing in Family", cue:["what it is","when your family had it","how your family got it","why it is important to your family"], p3:["What things do families keep for a long time?","Things valued now vs in the past?","Why do people visit museums?"] },
-  { id:9, cat:"Objects", catCn:"物品", topic:"A TV Show / Online Program", cue:["what it is","what it is about","how often you watch it","how you feel about it"], p3:["TV programs for young vs old people?","What makes a program popular?","Kinds of programs popular in your country?"] },
-  { id:10, cat:"Objects", catCn:"物品", topic:"An Advertisement", cue:["who the famous person is","where you can see it","what it is about","how you feel about it"], p3:["Advantages and disadvantages of ads?","Why are celebrities used in ads?","Most important factor in an ad?"] },
-  { id:11, cat:"Objects", catCn:"物品", topic:"An Important Decision", cue:["what the decision was","how you made your decision","what the results were","why it was important"], p3:["Do children make important decisions?","Important decisions after graduation?","Who can children ask for help?"] },
-  { id:12, cat:"Objects", catCn:"物品", topic:"An App", cue:["what it is","when/how you use it","where you found it","how you feel about it"], p3:["App usage: old vs young people?","Popular apps in your country?","Should parents limit children's screen time?"] },
-  { id:13, cat:"Events", catCn:"事件", topic:"A Trip", cue:["who you would like to go with","where you would like to go","when you would like to go","why you would like this means of transport"], p3:["Popular vehicles in your country?","Does air pollution come from vehicles?","Should transport change for environment?"] },
-  { id:14, cat:"Events", catCn:"事件", topic:"A Time When You Got Up Early", cue:["when it was","what you did","why you got up early","how you felt about it"], p3:["Do you know anyone who gets up early?","Why do people get up early?","Why do some people stay up late?"] },
-  { id:15, cat:"Events", catCn:"事件", topic:"A Time When You Worked in a Group", cue:["what you did","who you worked with","what problems you faced","why you worked in the group"], p3:["Why do some prefer working alone?","What should a leader do?","Should students learn group work?"] },
-  { id:16, cat:"Events", catCn:"事件", topic:"A Problem With an Electronic Device", cue:["when it happened","where it happened","what the problem was","how you solved it"], p3:["Why do people buy new electronic devices?","Impact of electronic devices on people?"] },
-  { id:17, cat:"Events", catCn:"事件", topic:"A Live Sports Event", cue:["what it was","when and where you watched it","who you watched it with","why you liked it"], p3:["Why do some like watching sports events?","Where do people normally watch?","Watching sports online vs in person?"] },
-  { id:18, cat:"Events", catCn:"事件", topic:"A Time You Were Proud of a Family Member", cue:["when it happened","who the person is","what the person did","why you felt proud"], p3:["When would parents feel proud of children?","Should parents reward children?","Do rewards help children improve?"] },
-  { id:19, cat:"Events", catCn:"事件", topic:"A Time When You Gave Advice", cue:["when it was","to whom you gave the advice","what the advice was","why you gave the advice"], p3:["Should people prepare before giving advice?","Is it good to ask strangers online for advice?","Ask friends vs parents for advice?"] },
-  { id:20, cat:"People", catCn:"人物", topic:"An Organized Person", cue:["who he/she is","how you knew him/her","what plans he/she makes","how you feel about this person"], p3:["What activities need planning ahead?","Is it important to plan ahead?","Do young people make study plans?","Should children plan their future?"] },
-  { id:21, cat:"People", catCn:"人物", topic:"A Person Who Protects Nature", cue:["who this person is","what he/she does","how often he/she does it","how you feel about this person"], p3:["Should parents teach environmental protection?","What can people do to protect nature?","Teach environmental protection at school?"] },
-  { id:22, cat:"People", catCn:"人物", topic:"A Famous Person", cue:["who he/she is","how you got to know him/her","how and where you would like to meet","why you would like to meet him/her"], p3:["Advantages of being a famous child?","What can children do to become famous?","Do people become famous because of talent?"] },
-  { id:23, cat:"Places", catCn:"地点", topic:"A Boring Place", cue:["where it is","who you went there with","what you did there","why it was boring"], p3:["Why do children think education is boring?","Why are some teachers' classes boring?","What can people do when bored?"] },
-  { id:24, cat:"Objects", catCn:"物品", topic:"A Story / Book With Animals", cue:["what animals are in it","what the story/book is about","why you read it","what you think of it"], p3:["Should schools teach children about animals?","Pets as family members?","Do many people keep pets in your country?"] },
-  { id:25, cat:"Objects", catCn:"物品", topic:"A New Law You Want to Introduce", cue:["what law it is","what changes it brings","whether it will be popular","how you feel about it"], p3:["What rules should students follow?","Do people usually obey the law?","How to teach children to obey rules?"] },
-  { id:26, cat:"Events", catCn:"事件", topic:"A Time You Needed to Use Imagination", cue:["when it was","why you needed imagination","how difficult or easy it was","how you felt about it"], p3:["What jobs need imagination?","Subjects helpful for children's imagination?","Is imagination essential for scientists?"] },
-  { id:27, cat:"Events", catCn:"事件", topic:"Something You Did to Learn Another Language", cue:["what language you learned","what you did","how it helped you learn","how you felt about it"], p3:["Difficulties when learning a language?","Is language learning important?","Best way to learn a language?"] },
-  { id:28, cat:"Places", catCn:"地点", topic:"A Home You Like to Visit", cue:["where it is","what it is like","why you like to visit it","why you would not live there"], p3:["Do Chinese people like visiting others' homes?","What do Chinese do when visiting?","City vs countryside homes?"] },
-  { id:29, cat:"People", catCn:"人物", topic:"A Person Who Learned a Skill", cue:["who this person is","what skill he/she learned","how he/she learned it","whether it would be easier from a teacher"], p3:["Is it necessary to keep learning after school?","Practical vs academic skills?","Should teachers make learning fun?"] },
-  { id:30, cat:"Objects", catCn:"物品", topic:"An Interesting Video", cue:["when and where you watched it","what it is about","why you watched it","how you felt about it"], p3:["What kind of videos do people like?","Watching videos vs reading books?","Skills from watching videos?"] },
-  { id:31, cat:"Events", catCn:"事件", topic:"A Technological Problem", cue:["what the problem was","when and where you faced it","how challenging it was","how you solved it"], p3:["Advantages and disadvantages of AI?","Should people learn AI?","Are students overly reliant on AI?"] },
-  { id:32, cat:"Places", catCn:"地点", topic:"A Place You Want to Visit", cue:["where it is","what you will do there","how long you will stay","why you would like to visit it"], p3:["Why do some choose not to travel abroad?","Is a gap period important?"] },
-  { id:33, cat:"People", catCn:"人物", topic:"A Helpful Person", cue:["who this person is","how often he/she helps others","how/why he/she helps others","how you feel about this person"], p3:["Help needed when looking for a job?","What can children do to help parents?","Should schools teach household chores?"] },
-  { id:34, cat:"Objects", catCn:"物品", topic:"A Perfect Job", cue:["what it is","where you heard about it","what you need to learn for it","why it is your perfect job"], p3:["What jobs do children want?","What kind of job is a dream job?","Do people's ideal jobs change as they grow?"] },
-  { id:35, cat:"Objects", catCn:"物品", topic:"A Movie You Watched Recently", cue:["when and where you watched it","who you watched it with","what it was about","why you watched it"], p3:["What kind of movies are successful?","Factors that make a movie successful?","Domestic vs foreign movies?"] },
-  { id:36, cat:"Events", catCn:"事件", topic:"An Occasion When Mobile Phones Were Not Allowed", cue:["when it was","where it was","why you were not allowed to use it","how you felt about it"], p3:["Mobile phone use: young vs old?","Positive and negative impacts on friendship?","Examples of good phone manners?"] },
-  { id:37, cat:"Places", catCn:"地点", topic:"An Interesting Building", cue:["what it looks like","where it is","what function it has","why it is interesting"], p3:["Types of buildings popular in your country?","Building look outside vs inside?","Why do people visit historical sites?"] },
-];
+function pickIconForTopic(name) {
+  const n = String(name || '').toLowerCase();
+  if (n.includes('home') || n.includes('hometown') || n.includes('accommodation')) return '🏠';
+  if (n.includes('study') || n.includes('school') || n.includes('teacher') || n.includes('science') || n.includes('reading')) return '📚';
+  if (n.includes('work') || n.includes('job')) return '💼';
+  if (n.includes('music') || n.includes('sing')) return '🎵';
+  if (n.includes('shopping')) return '🛒';
+  if (n.includes('food')) return '🍜';
+  if (n.includes('photo') || n.includes('film') || n.includes('video')) return '📷';
+  if (n.includes('sport')) return '⚽';
+  if (n.includes('car') || n.includes('trip') || n.includes('travel') || n.includes('walking')) return '🚶';
+  if (n.includes('social') || n.includes('website') || n.includes('typing')) return '💻';
+  if (n.includes('animal') || n.includes('pet')) return '🐾';
+  return '🗂️';
+}
+
+for (const topic of P1_TOPICS) {
+  if (!topic.icon) topic.icon = pickIconForTopic(topic.name);
+}
 
 // ================================================================
 //  STATE
@@ -696,7 +655,18 @@ let S = {
   customP1: null, customP2: null,
   transcripts: [],
   isRec: false, rec: null, curTranscript: '',
+  recFinal: '',
+  recInterim: '',
   timerSec: 20, timerInt: null,
+  autoTimerPending: false,
+  nextAfterSpeech: null,
+  speechReady: false,
+  speechInProgress: false,
+  hasStarted: false,
+  expectingP2Start: false,
+  curQuestionKey: '',
+  lastSavedKey: '',
+  currentSet: null,
   transStep: 'cue', prepInt: null,
 };
 
@@ -708,6 +678,10 @@ function fd(d) {
 //  INIT
 // ================================================================
 async function init() {
+  if (!Q_BANK || !P1_TOPICS.length || !P2_CARDS.length) {
+    updateAuthStatus('err', '题库加载失败，请刷新页面重试');
+    return;
+  }
   updateAuthStatus('ok', '💾 本地模式已就绪');
   const currentEmail = localStorage.getItem(LOCAL_CURRENT_KEY);
   if (currentEmail) {
@@ -899,11 +873,16 @@ function renderHome() {
   const days = ['日','一','二','三','四','五','六'];
   const today = fd(now);
   const done = !!S.completedDays[today];
+  const set = getTodayPracticeSet();
   document.getElementById('homeDate').textContent = `${now.getMonth()+1}月${now.getDate()}日 · 星期${days[now.getDay()]}`;
   document.getElementById('homeDay').textContent = `第 ${S.totalPractice + 1} 天练习`;
   const btn = document.getElementById('btnStart');
   btn.textContent = done ? '✅ 今日已完成 · 查看报告' : '▶ 开始今日练习';
   btn.className = 'btn-start' + (done ? ' done' : '');
+  const setInfo = document.getElementById('todaySetInfo');
+  if (setInfo && set.p1 && set.p2) {
+    setInfo.innerHTML = `今日完整套题：Part 1「${escHtml(set.p1.name)}」 · Part 2「${escHtml(set.p2.topic)}」<br>Part 3 自动跟随 Part 2 延伸问题`;
+  }
 
   const avg = S.history.length ? Math.round(S.history.reduce((a,h) => a+(h.overall||0), 0)/S.history.length*10)/10 : 0;
   document.getElementById('statsRow').innerHTML = `
@@ -965,23 +944,56 @@ function pickP2(id) {
   buildSidebar();
 }
 
+function getTodayPracticeSet() {
+  const todayIdx = Math.max(0, S.totalPractice);
+  if (DAILY_SETS.length) {
+    const set = DAILY_SETS[todayIdx % DAILY_SETS.length];
+    const p1 = P1_TOPICS.find(t => t.name === set.part1Name) || P1_TOPICS[todayIdx % P1_TOPICS.length];
+    const p2 = P2_CARDS.find(c => c.id === set.part2Id) || P2_CARDS[todayIdx % P2_CARDS.length];
+    return { p1, p2, setDay: set.day };
+  }
+  return {
+    p1: P1_TOPICS[todayIdx % P1_TOPICS.length],
+    p2: P2_CARDS[todayIdx % P2_CARDS.length],
+    setDay: todayIdx + 1,
+  };
+}
+
 async function startTodayPractice() {
+  if (!P1_TOPICS.length || !P2_CARDS.length) {
+    toast('题库加载失败，请刷新页面', 'err');
+    return;
+  }
   const today = fd(new Date());
   if (S.completedDays[today]) {
     const h = S.history.find(x => x.date === today);
     if (h) { showResult(h); return; }
   }
-  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0))/86400000);
-  if (!S.customP1) S.customP1 = P1_TOPICS[dayOfYear % P1_TOPICS.length];
-  if (!S.customP2) S.customP2 = P2_CARDS[dayOfYear % P2_CARDS.length];
 
+  const set = getTodayPracticeSet();
+  if (!S.customP1) S.customP1 = set.p1;
+  if (!S.customP2) S.customP2 = set.p2;
+
+  if (!S.customP1?.qs?.length || !S.customP2?.p3?.length) {
+    toast('题目加载失败，请刷新后重试', 'err');
+    return;
+  }
+
+  S.currentSet = set;
+  S.hasStarted = true;
+  S.part = 1;
+  S.p1Idx = 0;
+  S.p3Idx = 0;
+  S.transcripts = [];
+  S.expectingP2Start = false;
+  S.autoTimerPending = false;
+  S.lastSavedKey = '';
+  S.curQuestionKey = '';
   S.p1Qs = S.customP1.qs;
   S.p3Qs = S.customP2.p3;
-  S.p1Idx = 0; S.p3Idx = 0;
-  S.transcripts = [];
-  S.part = 1;
+  stopSpeaking();
+  clearInterval(S.timerInt);
 
-  // Mark P1 topic done
   const t1 = S.p1Data.find(x => x.name === S.customP1.name);
   if (t1) t1.done = true;
 
@@ -991,10 +1003,15 @@ async function startTodayPractice() {
 }
 
 function showPage(p) {
-  document.getElementById('homePage').style.display = p==='home' ? '' : 'none';
-  document.getElementById('examPage').style.display = p==='exam' ? '' : 'none';
-  document.getElementById('transitionPage').style.display = p==='trans' ? '' : 'none';
-  document.getElementById('resultPage').style.display = p==='result' ? '' : 'none';
+  const map = {
+    home: document.getElementById('homePage'),
+    exam: document.getElementById('examPage'),
+    trans: document.getElementById('transitionPage'),
+    result: document.getElementById('resultPage'),
+  };
+  Object.keys(map).forEach(key => {
+    if (map[key]) map[key].style.display = key === p ? '' : 'none';
+  });
 }
 
 // ================================================================
@@ -1002,26 +1019,51 @@ function showPage(p) {
 // ================================================================
 function showP1Q() {
   stopSpeaking();
+  clearInterval(S.timerInt);
+  S.autoTimerPending = false;
+  S.nextAfterSpeech = null;
+  S.expectingP2Start = false;
   const q = S.p1Qs[S.p1Idx];
   if (!q) { toast('题目加载失败', 'err'); return; }
   S.curTranscript = '';
+  S.recFinal = '';
+  S.recInterim = '';
+  S.lastSavedKey = '';
   document.getElementById('transcriptBox').innerHTML = '<span class="placeholder">您的回答将实时显示...</span>';
   document.getElementById('qBadge').textContent = 'PART 1';
   document.getElementById('qBadge').className = 'q-badge part1';
-  document.getElementById('qNum').textContent = `${S.p1Idx+1} / ${S.p1Qs.length}`;
+  document.getElementById('qNum').textContent = `问题 ${S.p1Idx+1} / ${S.p1Qs.length}`;
   document.getElementById('qText').innerHTML = q;
   document.getElementById('qCue').style.display = 'none';
   document.getElementById('btnNext').textContent = '下一题 ▶';
   document.getElementById('btnNext').disabled = false;
   document.getElementById('btnNext').className = 'btn primary';
+  S.curQuestionKey = `P1-${S.p1Idx}`;
+  const stat = document.getElementById('timerStatus');
+  if (stat) stat.textContent = '题目朗读中...';
+  const secEl = document.getElementById('timerSec');
+  if (secEl) secEl.textContent = S.settings.timerSec;
   updateProg('part1');
-  speakQuestion(q);
-  startTimer(S.settings.timerSec, () => { stopMic(); autoAdv(); });
+  speakQuestion(q, {
+    onEnd: () => {
+      if (S.part !== 1 || S.p1Qs[S.p1Idx] !== q) return;
+      S.autoTimerPending = true;
+      const hint = document.getElementById('recHint');
+      if (hint && !S.isRec) hint.textContent = '点击录音后开始20秒倒计时';
+      if (stat) stat.textContent = '点击录音开始作答';
+    }
+  });
 }
 
 function showP2Q() {
+  clearInterval(S.timerInt);
+  S.autoTimerPending = false;
+  S.nextAfterSpeech = null;
   const card = S.customP2;
   S.curTranscript = '';
+  S.recFinal = '';
+  S.recInterim = '';
+  S.lastSavedKey = '';
   document.getElementById('transcriptBox').innerHTML = '<span class="placeholder">开始陈述后内容将实时显示...</span>';
   document.getElementById('qBadge').textContent = 'PART 2';
   document.getElementById('qBadge').className = 'q-badge part2';
@@ -1032,30 +1074,55 @@ function showP2Q() {
   document.getElementById('btnNext').textContent = '🎤 开始陈述（2分钟）';
   document.getElementById('btnNext').disabled = false;
   document.getElementById('btnNext').className = 'btn gold-btn';
+  S.curQuestionKey = 'P2-0';
+  const stat = document.getElementById('timerStatus');
+  if (stat) stat.textContent = '先阅读话题卡，准备后开始陈述';
+  const secEl = document.getElementById('timerSec');
+  if (secEl) secEl.textContent = 120;
   updateProg('part2');
 }
 
 function showP3Q() {
   stopSpeaking();
+  clearInterval(S.timerInt);
+  S.autoTimerPending = false;
+  S.nextAfterSpeech = null;
+  S.expectingP2Start = false;
   const q = S.p3Qs[S.p3Idx];
   if (!q) { toast('题目加载失败', 'err'); return; }
   S.curTranscript = '';
+  S.recFinal = '';
+  S.recInterim = '';
+  S.lastSavedKey = '';
   document.getElementById('transcriptBox').innerHTML = '<span class="placeholder">您的回答将实时显示...</span>';
   document.getElementById('qBadge').textContent = 'PART 3';
   document.getElementById('qBadge').className = 'q-badge part3';
-  document.getElementById('qNum').textContent = `${S.p3Idx+1} / ${S.p3Qs.length}`;
+  document.getElementById('qNum').textContent = `问题 ${S.p3Idx+1} / ${S.p3Qs.length}`;
   document.getElementById('qText').innerHTML = q;
   document.getElementById('qCue').style.display = 'none';
   document.getElementById('btnNext').textContent = '下一题 ▶';
   document.getElementById('btnNext').disabled = false;
   document.getElementById('btnNext').className = 'btn primary';
+  S.curQuestionKey = `P3-${S.p3Idx}`;
+  const stat = document.getElementById('timerStatus');
+  if (stat) stat.textContent = '题目朗读中...';
+  const secEl = document.getElementById('timerSec');
+  if (secEl) secEl.textContent = S.settings.timerSec;
   updateProg('part3');
-  speakQuestion(q);
-  startTimer(S.settings.timerSec, () => { stopMic(); autoAdvP3(); });
+  speakQuestion(q, {
+    onEnd: () => {
+      if (S.part !== 3 || S.p3Qs[S.p3Idx] !== q) return;
+      S.autoTimerPending = true;
+      const hint = document.getElementById('recHint');
+      if (hint && !S.isRec) hint.textContent = '点击录音后开始20秒倒计时';
+      if (stat) stat.textContent = '点击录音开始作答';
+    }
+  });
 }
 
 function autoAdv() {
   if (S.part === 1) {
+    S.autoTimerPending = false;
     if (S.p1Idx < S.p1Qs.length-1) { S.p1Idx++; setTimeout(showP1Q, 700); }
     else goP2();
   }
@@ -1063,6 +1130,7 @@ function autoAdv() {
 
 function autoAdvP3() {
   if (S.part === 3) {
+    S.autoTimerPending = false;
     if (S.p3Idx < S.p3Qs.length-1) { S.p3Idx++; setTimeout(showP3Q, 700); }
     else finishAll();
   }
@@ -1070,6 +1138,9 @@ function autoAdvP3() {
 
 function goP2() {
   S.part = 0;
+  S.expectingP2Start = false;
+  S.autoTimerPending = false;
+  clearInterval(S.timerInt);
   showPage('trans');
   S.transStep = 'cue';
   document.getElementById('transIcon').textContent = '📋';
@@ -1080,7 +1151,10 @@ function goP2() {
 
 function onTransBtn() {
   if (S.transStep === 'cue') showCueScreen();
-  else if (S.transStep === 'speaking') startP2Speaking();
+  else if (S.transStep === 'speaking') {
+    S.expectingP2Start = true;
+    startP2Speaking();
+  }
   else if (S.transStep === 'p3') {
     showPage('exam');
     S.part = 3;
@@ -1090,6 +1164,7 @@ function onTransBtn() {
 }
 
 function showCueScreen() {
+  S.expectingP2Start = false;
   const card = S.customP2;
   document.getElementById('cueContent').innerHTML = `
     <div class="cue-topic">
@@ -1116,35 +1191,38 @@ function closeCue() {
 function doPart2() {
   closeCue();
   S.transStep = 'speaking';
+  S.expectingP2Start = true;
   startP2Speaking();
 }
 
 function startP2Speaking() {
+  if (!S.expectingP2Start) return;
+  S.expectingP2Start = false;
+  clearInterval(S.timerInt);
+  S.autoTimerPending = true;
+  stopMic({ pushTranscript: false });
   showPage('exam');
   S.part = 2;
   updateTabs();
   showP2Q();
-  startTimer(120, () => {
-    stopMic();
-    toast('⏰ Part 2 陈述时间结束！');
-    setTimeout(() => {
-      S.transStep = 'p3';
-      showPage('trans');
-      document.getElementById('transIcon').textContent = '💬';
-      document.getElementById('transTitle').textContent = '准备 Part 3 · 深度讨论';
-      document.getElementById('transDesc').textContent = `考官将就 Part 2 话题进行深入讨论，每题约 ${S.settings.timerSec} 秒。`;
-      document.getElementById('btnTrans').textContent = '💬 开始 Part 3';
-    }, 800);
-  });
-  setTimeout(() => toggleMic(), 400);
+  S.autoTimerPending = true;
+  const stat = document.getElementById('timerStatus');
+  if (stat) stat.textContent = '点击录音后开始2分钟陈述';
+  const hint = document.getElementById('recHint');
+  if (hint) hint.textContent = '点击开始录音';
 }
 
 function nextQ() {
-  stopMic();
+  stopMic({ pushTranscript: true });
   if (S.part === 1) {
     if (S.p1Idx < S.p1Qs.length-1) { S.p1Idx++; showP1Q(); }
     else goP2();
-  } else if (S.part === 2) startP2Speaking();
+  } else if (S.part === 2) {
+    if (!S.expectingP2Start) {
+      S.expectingP2Start = true;
+      startP2Speaking();
+    }
+  }
   else if (S.part === 3) {
     if (S.p3Idx < S.p3Qs.length-1) { S.p3Idx++; showP3Q(); }
     else finishAll();
@@ -1152,7 +1230,7 @@ function nextQ() {
 }
 
 function skipQ() {
-  stopMic();
+  stopMic({ pushTranscript: true });
   if (S.part === 1) {
     if (S.p1Idx < S.p1Qs.length-1) { S.p1Idx++; showP1Q(); }
     else goP2();
@@ -1196,9 +1274,17 @@ function startTimer(sec, onEnd) {
   const fg = document.getElementById('timerFg');
   const secEl = document.getElementById('timerSec');
   const statEl = document.getElementById('timerStatus');
+  const labelEl = document.querySelector('.timer-label');
+  if (labelEl) labelEl.textContent = sec >= 60 ? '分秒' : '秒';
 
   function tick() {
-    secEl.textContent = S.timerSec;
+    if (sec >= 60) {
+      const mm = Math.floor(S.timerSec / 60);
+      const ss = S.timerSec % 60;
+      secEl.textContent = `${mm}:${String(ss).padStart(2,'0')}`;
+    } else {
+      secEl.textContent = S.timerSec;
+    }
     const ratio = S.timerSec / sec;
     fg.style.strokeDashoffset = CIRC*(1-ratio);
     fg.className = 'fg' + (S.timerSec<=5?' danger':S.timerSec<=10?' warning':'');
@@ -1220,10 +1306,8 @@ function startTimer(sec, onEnd) {
 //  SPEECH
 // ================================================================
 function initSpeech() {
-  if (window.speechSynthesis) {
-    window.speechSynthesis.getVoices();
-    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-  }
+  S.speechReady = !!window.speechSynthesis;
+  if (window.speechSynthesis) window.speechSynthesis.getVoices();
   if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     S.rec = new SR();
@@ -1231,24 +1315,46 @@ function initSpeech() {
     S.rec.interimResults = true;
     S.rec.lang = 'en-US';
     S.rec.onresult = e => {
-      let t = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
-      const interim = e.results[e.results.length-1].isFinal ? '' : '...';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const chunk = e.results[i][0].transcript || '';
+        if (e.results[i].isFinal) S.recFinal += chunk + ' ';
+        else S.recInterim = chunk;
+      }
+      const finalText = S.recFinal.trim();
+      const interimText = S.recInterim.trim();
       const tb = document.getElementById('transcriptBox');
-      if (tb) tb.innerHTML = `<span>${escHtml(t)}</span><span class="interim">${escHtml(interim)}</span>`;
-      S.curTranscript = t;
+      if (tb) tb.innerHTML = `<span>${escHtml(finalText)}</span><span class="interim">${interimText?` ${escHtml(interimText)}...`:''}</span>`;
+      S.curTranscript = `${finalText}${interimText ? (' ' + interimText) : ''}`.trim();
     };
-    S.rec.onerror = e => { if (e.error !== 'no-speech') console.warn('SR:', e.error); };
-    S.rec.onend = () => { if (S.isRec) S.rec.start(); };
+    S.rec.onerror = e => {
+      if (e.error !== 'no-speech') console.warn('SR:', e.error);
+    };
+    S.rec.onend = () => {
+      if (!S.isRec) return;
+      try { S.rec.start(); } catch (err) {}
+    };
   }
 }
 
-function speakQuestion(text) {
-  if (!window.speechSynthesis) return;
+function speakQuestion(text, opts = {}) {
+  const { onEnd } = opts;
+  if (!window.speechSynthesis) {
+    if (typeof onEnd === 'function') setTimeout(onEnd, 0);
+    return;
+  }
   window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(text);
+  S.speechInProgress = true;
+  const utter = new SpeechSynthesisUtterance(String(text || '').trim());
   utter.lang = 'en-US';
   utter.rate = 0.85;
+  utter.onend = () => {
+    S.speechInProgress = false;
+    if (typeof onEnd === 'function') onEnd();
+  };
+  utter.onerror = () => {
+    S.speechInProgress = false;
+    if (typeof onEnd === 'function') onEnd();
+  };
   const applyVoice = () => {
     const voices = window.speechSynthesis.getVoices();
     const v = voices.find(x => x.lang.startsWith('en') && x.lang.includes('US')) ||
@@ -1257,12 +1363,22 @@ function speakQuestion(text) {
     window.speechSynthesis.speak(utter);
   };
   const voices = window.speechSynthesis.getVoices();
-  if (voices.length > 0) applyVoice();
-  else window.speechSynthesis.onvoiceschanged = applyVoice;
+  if (voices.length > 0) {
+    applyVoice();
+  } else {
+    const fallback = setTimeout(() => {
+      if (S.speechInProgress) applyVoice();
+    }, 180);
+    window.speechSynthesis.onvoiceschanged = () => {
+      clearTimeout(fallback);
+      applyVoice();
+    };
+  }
 }
 
 function stopSpeaking() {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
+  S.speechInProgress = false;
 }
 
 function speakCurrentQ() {
@@ -1271,27 +1387,90 @@ function speakCurrentQ() {
 }
 
 function toggleMic() {
+  if (!S.hasStarted) {
+    toast('请先点击“开始今日练习”', 'err');
+    return;
+  }
   if (!S.rec) { toast('请使用 Chrome 浏览器以获得语音识别支持', 'err'); return; }
+  if (S.speechInProgress) {
+    toast('请等题目朗读结束后再录音', 'err');
+    return;
+  }
   if (S.isRec) stopMic(); else startMic();
 }
 
 function startMic() {
+  if (S.part !== 1 && S.part !== 2 && S.part !== 3) return;
+  if (S.autoTimerPending) {
+    const sec = S.part === 2 ? 120 : S.settings.timerSec;
+    const onEnd = S.part === 1
+      ? () => { stopMic({ pushTranscript: true }); autoAdv(); }
+      : S.part === 2
+        ? () => {
+            stopMic({ pushTranscript: true });
+            toast('⏰ Part 2 陈述时间结束！');
+            setTimeout(() => {
+              S.transStep = 'p3';
+              showPage('trans');
+              document.getElementById('transIcon').textContent = '💬';
+              document.getElementById('transTitle').textContent = '准备 Part 3 · 深度讨论';
+              document.getElementById('transDesc').textContent = `考官将就 Part 2 话题进行深入讨论，每题约 ${S.settings.timerSec} 秒。`;
+              document.getElementById('btnTrans').textContent = '💬 开始 Part 3';
+            }, 800);
+          }
+        : () => { stopMic({ pushTranscript: true }); autoAdvP3(); };
+    startTimer(sec, onEnd);
+    S.autoTimerPending = false;
+  } else if (S.part === 2 && !S.timerInt) {
+    // 防止Part 2未开始计时就进入录音
+    startTimer(120, () => {
+      stopMic({ pushTranscript: true });
+      toast('⏰ Part 2 陈述时间结束！');
+      setTimeout(() => {
+        S.transStep = 'p3';
+        showPage('trans');
+        document.getElementById('transIcon').textContent = '💬';
+        document.getElementById('transTitle').textContent = '准备 Part 3 · 深度讨论';
+        document.getElementById('transDesc').textContent = `考官将就 Part 2 话题进行深入讨论，每题约 ${S.settings.timerSec} 秒。`;
+        document.getElementById('btnTrans').textContent = '💬 开始 Part 3';
+      }, 800);
+    });
+  }
+
   S.isRec = true; S.curTranscript = '';
-  S.rec.start();
+  S.recFinal = '';
+  S.recInterim = '';
+  try { S.rec.start(); } catch (err) {
+    S.isRec = false;
+    toast('麦克风启动失败，请重试', 'err');
+    return;
+  }
   document.getElementById('btnMic').classList.add('recording');
   const h = document.getElementById('recHint');
   h.textContent = '🔴 录音中...'; h.classList.add('on');
   toast('🎙️ 录音开始', 'ok');
 }
 
-function stopMic() {
-  if (!S.isRec) return;
+function stopMic(opts = {}) {
+  const { pushTranscript = true } = opts;
+  if (!S.isRec) {
+    if (pushTranscript && S.curQuestionKey && S.lastSavedKey !== S.curQuestionKey) {
+      S.transcripts.push((S.curTranscript || '').trim() || '[无回答]');
+      S.lastSavedKey = S.curQuestionKey;
+    }
+    return;
+  }
   S.isRec = false;
   try { S.rec.stop(); } catch(e) {}
   document.getElementById('btnMic').classList.remove('recording');
   const h = document.getElementById('recHint');
   h.textContent = '点击开始录音'; h.classList.remove('on');
-  S.transcripts.push(S.curTranscript || '[无回答]');
+  const merged = `${S.recFinal || ''} ${S.recInterim || ''}`.trim();
+  S.curTranscript = merged || S.curTranscript || '';
+  if (pushTranscript && S.curQuestionKey && S.lastSavedKey !== S.curQuestionKey) {
+    S.transcripts.push(S.curTranscript || '[无回答]');
+    S.lastSavedKey = S.curQuestionKey;
+  }
 }
 
 // ================================================================
@@ -1299,8 +1478,9 @@ function stopMic() {
 // ================================================================
 async function finishAll() {
   clearInterval(S.timerInt);
-  stopMic();
+  stopMic({ pushTranscript: true });
   stopSpeaking();
+  S.hasStarted = false;
   showLoad('正在生成评分报告...');
 
   const today = fd(new Date());
@@ -1363,7 +1543,7 @@ Return ONLY valid JSON (no markdown):
   const res = await fetch(`${S.settings.baseUrl}/v1/messages`, {
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body: JSON.stringify({model:'claude-sonnet-4-7',max_tokens:2048,messages:[{role:'user',content:prompt}]})
+    body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2048,messages:[{role:'user',content:prompt}]})
   });
   if (!res.ok) {
     const t = await res.text();
@@ -1445,10 +1625,19 @@ function showHistory() {
 function closeHistory() { document.getElementById('historyModal').classList.remove('show'); }
 
 function backHome() {
+  clearInterval(S.timerInt);
+  S.autoTimerPending = false;
+  S.expectingP2Start = false;
+  S.hasStarted = false;
+  S.curQuestionKey = '';
+  S.lastSavedKey = '';
+  stopSpeaking();
+  stopMic({ pushTranscript: false });
   showPage('home');
   renderHome();
   buildSidebar();
   S.customP1 = null; S.customP2 = null;
+  S.currentSet = null;
 }
 
 // ================================================================
