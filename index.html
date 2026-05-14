@@ -462,7 +462,10 @@ body {
       <div style="width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;"></div>
       <p style="color:var(--text-dim);font-size:13px;" id="authLoadText">正在登录...</p>
     </div>
-    <div id="offlineNote" style="margin-top:20px;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);">
+    <div id="firebaseStatus" style="margin-top:16px;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);font-size:12px;color:var(--text-dim);">
+      <span id="fbStatusText">⏳ 正在检查Firebase连接...</span>
+    </div>
+    <div id="offlineNote" style="margin-top:12px;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);">
       <p style="font-size:12px;color:var(--text-dim);line-height:1.6;">没有账号？随便填一个邮箱和密码注册即可，数据会自动创建。</p>
     </div>
   </div>
@@ -960,7 +963,41 @@ function init() {
 // ================================================================
 //  AUTH
 // ================================================================
+// Check Firebase connection status
+function checkFirebaseStatus() {
+  const statusEl = document.getElementById('fbStatusText');
+  if (!statusEl) return;
+
+  // Try to access Firestore to verify connection
+  const start = Date.now();
+  db.collection('__check__').doc('__test__').get()
+    .then(() => {
+      statusEl.textContent = '✅ Firebase 连接正常';
+      statusEl.parentElement.style.borderColor = 'var(--green)';
+      statusEl.parentElement.style.color = 'var(--green)';
+    })
+    .catch(e => {
+      if (e.code === 'permission-denied') {
+        // Firebase works, just no permission - that's ok for checking
+        statusEl.textContent = '✅ Firebase 连接正常';
+        statusEl.parentElement.style.borderColor = 'var(--green)';
+        statusEl.parentElement.style.color = 'var(--green)';
+      } else {
+        statusEl.textContent = '⚠️ Firebase 连接慢或失败: ' + (e.message || '网络问题');
+        statusEl.parentElement.style.borderColor = 'var(--red)';
+        statusEl.parentElement.style.color = 'var(--red)';
+      }
+    });
+}
+
 function initAuth() {
+  // Enable Firestore offline persistence for speed
+  db.enablePersistence({ synchronizeTabs: true }).catch(e => {
+    console.log('Persistence not available:', e);
+  });
+
+  checkFirebaseStatus();
+
   auth.onAuthStateChanged(async user => {
     if (user) {
       // Logged in
@@ -1004,18 +1041,36 @@ async function doAuth() {
   if (password.length < 6) { showAuthErr('密码至少6位'); return; }
   document.getElementById('authLoading').style.display = '';
   document.getElementById('authBtn').disabled = true;
+  document.getElementById('authError').style.display = 'none';
   document.getElementById('authLoadText').textContent = isLogin ? '正在登录...' : '正在注册...';
+
+  // Timeout safety: if no auth state change in 15s, show error
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), 15000);
+  });
+
   try {
+    let authPromise;
     if (isLogin) {
-      await auth.signInWithEmailAndPassword(email, password);
+      authPromise = auth.signInWithEmailAndPassword(email, password);
     } else {
-      await auth.createUserWithEmailAndPassword(email, password);
+      authPromise = auth.createUserWithEmailAndPassword(email, password);
     }
+    await Promise.race([authPromise, timeoutPromise]);
+    clearTimeout(timeoutId);
+    // Auth successful - onAuthStateChanged will handle the redirect
   } catch(e) {
-    let msg = '操作失败，请重试';
-    if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') msg = '邮箱或密码错误';
-    if (e.code === 'auth/email-already-in-use') msg = '该邮箱已注册，请直接登录';
-    if (e.code === 'auth/weak-password') msg = '密码强度太弱，至少6位';
+    clearTimeout(timeoutId);
+    let msg = '操作失败，请检查网络后重试';
+    if (e.message === 'TIMEOUT') msg = '网络超时，请检查网络连接后重试';
+    else if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') msg = '邮箱或密码错误';
+    else if (e.code === 'auth/email-already-in-use') msg = '该邮箱已注册，请直接登录';
+    else if (e.code === 'auth/weak-password') msg = '密码强度太弱，至少6位';
+    else if (e.code === 'auth/invalid-email') msg = '邮箱格式不正确';
+    else if (e.code === 'auth/operation-not-allowed') msg = 'Firebase未开启邮箱登录，请到Firebase控制台启用';
+    else if (e.code === 'auth/network-request-failed') msg = '网络错误，请检查网络连接';
+    console.error('Auth error:', e);
     showAuthErr(msg);
   }
   document.getElementById('authLoading').style.display = 'none';
