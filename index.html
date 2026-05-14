@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>雅思口语每日打卡</title>
-<!-- Supabase SDK -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 :root {
   --bg: #0a1628;
@@ -299,7 +297,7 @@ body {
   <div class="auth-box">
     <div class="auth-logo">🗣️</div>
     <h1>雅思口语<span class="gold">每日打卡</span></h1>
-    <p>登录后你的打卡数据将在所有设备同步</p>
+    <p>登录后你的打卡数据会保存在当前浏览器中</p>
 
     <div class="auth-tabs">
       <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">登录</button>
@@ -320,17 +318,17 @@ body {
     </div>
 
     <div class="auth-note">
-      登录即表示你同意我们的服务条款<br>你的数据将安全保存在云端
+      登录后数据将保存在当前浏览器中<br>如需 AI 评分，可在设置中填写 Claude API Key
     </div>
 
-    <div class="auth-status loading" id="authStatus">
-      <span id="authStatusDot">⏳</span>
-      <span id="authStatusText">正在检查连接...</span>
+    <div class="auth-status ok" id="authStatus">
+      <span id="authStatusDot">💾</span>
+      <span id="authStatusText">本地模式：无需数据库，打开网页即可使用</span>
     </div>
 
     <div class="auth-hint">
       没有账号？随便填一个邮箱和6位密码注册即可。<br>
-      同一账号可在多设备登录，数据自动同步。
+      同一浏览器会自动保留你的练习记录。
     </div>
   </div>
 </div>
@@ -530,11 +528,85 @@ body {
 
 <script>
 // ================================================================
-//  SUPABASE INIT
+//  LOCAL AUTH + STORAGE
 // ================================================================
-const SUPABASE_URL = 'https://lsyyjhouaqvptlmuwshb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzeXlqaG91YXF2cHRsbXV3c2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA0NTkyMDAsImV4cCI6MjA2NjAzNTIwMH0.SbA5eJdN5YxJKvJw7P0xjLxJ6cZvJYOE8gLnC0z0x8I';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const LOCAL_USERS_KEY = 'ielts_local_users_v1';
+const LOCAL_CURRENT_KEY = 'ielts_current_user_v1';
+const LOCAL_DATA_PREFIX = 'ielts_user_data_v1_';
+const LOCAL_API_KEY = 'ielts_api_key';
+
+function readUsers() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function writeUsers(users) {
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+}
+
+function getUserDataKey(email) {
+  return LOCAL_DATA_PREFIX + email.toLowerCase();
+}
+
+function createEmptyUserState() {
+  return {
+    streak: 0,
+    totalPractice: 0,
+    history: [],
+    completedDays: {},
+    p1_done: P1_TOPICS.map(t => ({ name: t.name, done: false })),
+    p2_done: P2_CARDS.map(c => ({ id: c.id, cat: c.cat, topic: c.topic, done: false, score: null })),
+    settings: { apiKey: localStorage.getItem(LOCAL_API_KEY) || '', baseUrl: 'https://api.anthropic.com', sound: true, timerSec: 20 },
+  };
+}
+
+function loadLocalUserState(email) {
+  try {
+    return JSON.parse(localStorage.getItem(getUserDataKey(email)) || 'null') || createEmptyUserState();
+  } catch {
+    return createEmptyUserState();
+  }
+}
+
+function saveLocalUserState(email, data) {
+  localStorage.setItem(getUserDataKey(email), JSON.stringify(data));
+}
+
+function resetRuntimeStateFromData(data) {
+  S.streak = data.streak || 0;
+  S.totalPractice = data.totalPractice || 0;
+  S.history = Array.isArray(data.history) ? data.history : [];
+  S.completedDays = data.completedDays || {};
+  S.settings = { apiKey: localStorage.getItem(LOCAL_API_KEY) || '', baseUrl: 'https://api.anthropic.com', sound: true, timerSec: 20, ...(data.settings || {}) };
+  S.p1Data = P1_TOPICS.map(t => ({ ...t, done: false }));
+  S.p2Data = P2_CARDS.map(c => ({ id: c.id, cat: c.cat, topic: c.topic, done: false, score: null }));
+  (data.p1_done || []).forEach(saved => {
+    const item = S.p1Data.find(x => x.name === saved.name);
+    if (item) item.done = !!saved.done;
+  });
+  (data.p2_done || []).forEach(saved => {
+    const item = S.p2Data.find(x => x.id === saved.id);
+    if (item) {
+      item.done = !!saved.done;
+      item.score = saved.score ?? null;
+    }
+  });
+}
+
+function currentUserEmail() {
+  return S.user?.email || '';
+}
+
+function openAppForCurrentUser() {
+  document.getElementById('authOverlay').classList.add('auth-closed');
+  document.getElementById('appShell').classList.add('visible');
+  const data = loadLocalUserState(currentUserEmail());
+  resetRuntimeStateFromData(data);
+  buildSidebar();
+  renderHome();
+  updateTBStats();
+  initSpeech();
+}
 
 // ================================================================
 //  DATA
@@ -614,10 +686,10 @@ let S = {
   user: null,
   streak: 0, totalPractice: 0,
   history: [],
-  p2Data: P2_CARDS.map(c => ({ id: c.id, done: false, score: null })),
-  p1Data: P1_TOPICS.map(t => ({ name: t.name, done: false })),
+  p2Data: P2_CARDS.map(c => ({ id: c.id, cat: c.cat, topic: c.topic, done: false, score: null })),
+  p1Data: P1_TOPICS.map(t => ({ ...t, done: false })),
   completedDays: {},
-  settings: { apiKey: localStorage.getItem('ielts_api_key') || '', baseUrl: 'https://api.anthropic.com', sound: true, timerSec: 20 },
+  settings: { apiKey: localStorage.getItem(LOCAL_API_KEY) || '', baseUrl: 'https://api.anthropic.com', sound: true, timerSec: 20 },
   // session
   part: 1, p1Idx: 0, p3Idx: 0,
   p1Qs: [], p3Qs: [],
@@ -636,51 +708,14 @@ function fd(d) {
 //  INIT
 // ================================================================
 async function init() {
-  // Check Supabase connection
-  updateAuthStatus('loading', '正在连接Supabase...');
-  try {
-    const { error } = await sb.from('_placeholder').select('*').limit(1);
-    // Ignore errors, just check if connected
-    if (!error || error.message.includes('Not found') || error.code === 'PGRST116') {
-      updateAuthStatus('ok', '✅ Supabase 连接正常');
-    } else {
-      updateAuthStatus('err', '⚠️ Supabase 连接异常: ' + (error?.message || ''));
-    }
-  } catch(e) {
-    updateAuthStatus('err', '⚠️ 连接失败，请检查网络');
-  }
-
-  // Listen to auth state
-  sb.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      S.user = session.user;
-      document.getElementById('authOverlay').classList.add('auth-closed');
-      document.getElementById('appShell').classList.add('visible');
-      showLoad('正在加载数据...');
-      await loadUserData();
-      buildSidebar();
-      renderHome();
-      updateTBStats();
-      initSpeech();
-      hideLoad();
-    } else {
-      S.user = null;
-      document.getElementById('authOverlay').classList.remove('auth-closed');
-      document.getElementById('appShell').classList.remove('visible');
-    }
-  });
-
-  // Also check current session
-  const { data: { session } } = await sb.auth.getSession();
-  if (session?.user) {
-    S.user = session.user;
-    document.getElementById('authOverlay').classList.add('auth-closed');
-    document.getElementById('appShell').classList.add('visible');
-    await loadUserData();
-    buildSidebar();
-    renderHome();
-    updateTBStats();
-    initSpeech();
+  updateAuthStatus('ok', '💾 本地模式已就绪');
+  const currentEmail = localStorage.getItem(LOCAL_CURRENT_KEY);
+  if (currentEmail) {
+    S.user = { id: currentEmail.toLowerCase(), email: currentEmail };
+    openAppForCurrentUser();
+  } else {
+    document.getElementById('authOverlay').classList.remove('auth-closed');
+    document.getElementById('appShell').classList.remove('visible');
   }
 }
 
@@ -690,7 +725,7 @@ function updateAuthStatus(type, text) {
   el.className = 'auth-status ' + type;
   const dot = document.getElementById('authStatusDot');
   const txt = document.getElementById('authStatusText');
-  if (dot) dot.textContent = type === 'ok' ? '✅' : type === 'err' ? '❌' : '⏳';
+  if (dot) dot.textContent = type === 'ok' ? '💾' : type === 'err' ? '❌' : '⏳';
   if (txt) txt.textContent = text;
 }
 
@@ -710,11 +745,12 @@ function switchAuthTab(tab) {
 }
 
 async function doAuth() {
-  const email = document.getElementById('authEmail').value.trim();
+  const email = document.getElementById('authEmail').value.trim().toLowerCase();
   const password = document.getElementById('authPassword').value;
   const isLogin = S_authTab === 'login';
   if (!email || !password) { showAuthErr('请填写邮箱和密码'); return; }
   if (password.length < 6) { showAuthErr('密码至少6位'); return; }
+  if (!/^\S+@\S+\.\S+$/.test(email)) { showAuthErr('请输入正确的邮箱格式'); return; }
   if (!isLogin) {
     const confirm = document.getElementById('authConfirmPwd').value;
     if (password !== confirm) { showAuthErr('两次密码不一致'); return; }
@@ -725,22 +761,27 @@ async function doAuth() {
   document.getElementById('authLoadText').textContent = isLogin ? '正在登录...' : '正在注册...';
 
   try {
+    const users = readUsers();
     if (isLogin) {
-      const { error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      if (!users[email] || users[email].password !== password) throw new Error('INVALID_LOGIN');
     } else {
-      const { error } = await sb.auth.signUp({ email, password });
-      if (error) throw error;
+      if (users[email]) throw new Error('ALREADY_REGISTERED');
+      users[email] = { password, createdAt: new Date().toISOString() };
+      writeUsers(users);
+      if (!localStorage.getItem(getUserDataKey(email))) {
+        saveLocalUserState(email, createEmptyUserState());
+      }
     }
+
+    localStorage.setItem(LOCAL_CURRENT_KEY, email);
+    S.user = { id: email, email };
+    openAppForCurrentUser();
+    toast(isLogin ? '登录成功' : '注册成功', 'ok');
   } catch(e) {
     let msg = '操作失败，请重试';
-    if (e.message?.includes('Invalid login credentials')) msg = '邮箱或密码错误';
-    if (e.message?.includes('already registered')) msg = '该邮箱已注册，请直接登录';
-    if (e.message?.includes('weak')) msg = '密码强度太弱，至少6位';
-    if (e.message?.includes('rate limit')) msg = '操作太频繁，请稍后再试';
-    if (e.message?.includes('network')) msg = '网络错误，请检查网络';
-    console.error('Auth error:', e);
-    showAuthErr(msg + ' (' + (e.message || '').substring(0, 50) + ')');
+    if (e.message === 'INVALID_LOGIN') msg = '邮箱或密码错误';
+    if (e.message === 'ALREADY_REGISTERED') msg = '该邮箱已注册，请直接登录';
+    showAuthErr(msg);
   }
   document.getElementById('authLoading').style.display = 'none';
   document.getElementById('authBtn').disabled = false;
@@ -754,7 +795,12 @@ function showAuthErr(msg) {
 async function signOut() {
   closeSettings();
   closeHistory();
-  await sb.auth.signOut();
+  localStorage.removeItem(LOCAL_CURRENT_KEY);
+  S.user = null;
+  document.getElementById('authOverlay').classList.remove('auth-closed');
+  document.getElementById('appShell').classList.remove('visible');
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authConfirmPwd').value = '';
   toast('已退出登录', 'ok');
 }
 
@@ -763,52 +809,24 @@ async function signOut() {
 // ================================================================
 async function loadUserData() {
   if (!S.user) return;
-  const { data, error } = await sb
-    .from('user_state')
-    .select('*')
-    .eq('user_id', S.user.id)
-    .single();
-
-  if (error && error.code !== 'PGRST116') {
-    console.warn('Load error:', error);
-  }
-
-  if (data) {
-    S.streak = data.streak || 0;
-    S.totalPractice = data.total_practice || 0;
-    S.history = data.history || [];
-    S.completedDays = data.completed_days || {};
-    if (data.p1_done) {
-      data.p1_done.forEach(saved => {
-        const t = S.p1Data.find(x => x.name === saved.name);
-        if (t) t.done = saved.done;
-      });
-    }
-    if (data.p2_done) {
-      data.p2_done.forEach(saved => {
-        const c = S.p2Data.find(x => x.id === saved.id);
-        if (c) { c.done = saved.done; c.score = saved.score; }
-      });
-    }
-    if (data.settings) S.settings = { ...S.settings, ...data.settings };
-  }
+  const data = loadLocalUserState(currentUserEmail());
+  resetRuntimeStateFromData(data);
 }
 
 async function saveUserData() {
   if (!S.user) return;
   const payload = {
-    user_id: S.user.id,
     streak: S.streak,
-    total_practice: S.totalPractice,
+    totalPractice: S.totalPractice,
     history: S.history,
-    completed_days: S.completedDays,
+    completedDays: S.completedDays,
     p1_done: S.p1Data.map(t => ({ name: t.name, done: t.done })),
-    p2_done: S.p2Data.map(c => ({ id: c.id, done: c.done, score: c.score })),
+    p2_done: S.p2Data.map(c => ({ id: c.id, cat: c.cat, topic: c.topic, done: c.done, score: c.score })),
     settings: { apiKey: S.settings.apiKey, baseUrl: S.settings.baseUrl, sound: S.settings.sound, timerSec: S.settings.timerSec },
-    updated_at: new Date().toISOString(),
   };
-  await sb.from('user_state').upsert(payload, { onConflict: 'user_id' });
-  if (S.settings.apiKey) localStorage.setItem('ielts_api_key', S.settings.apiKey);
+  saveLocalUserState(currentUserEmail(), payload);
+  if (S.settings.apiKey) localStorage.setItem(LOCAL_API_KEY, S.settings.apiKey);
+  else localStorage.removeItem(LOCAL_API_KEY);
 }
 
 // ================================================================
@@ -1405,7 +1423,7 @@ async function saveSettings() {
   S.settings.timerSec = parseInt(document.getElementById('sTimer').value)||20;
   await saveUserData();
   closeSettings();
-  toast('✅ 设置已保存（已同步云端）', 'ok');
+  toast('✅ 设置已保存到当前浏览器', 'ok');
 }
 
 function showHistory() {
