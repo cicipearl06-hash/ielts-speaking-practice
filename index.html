@@ -411,9 +411,9 @@ body {
           <div class="progress-label" id="progLabel">准备开始</div>
         </div>
         <div class="part-tabs">
-          <div class="part-tab active" id="ptab1">Part 1<span class="part-tab-label">4题</span></div>
+          <div class="part-tab active" id="ptab1">Part 1<span class="part-tab-label">10题</span></div>
           <div class="part-tab" id="ptab2">Part 2<span class="part-tab-label">1题·2分钟</span></div>
-          <div class="part-tab" id="ptab3">Part 3<span class="part-tab-label">3-4题</span></div>
+          <div class="part-tab" id="ptab3">Part 3<span class="part-tab-label">5题</span></div>
         </div>
         <div class="timer-wrap">
           <div class="timer-ring">
@@ -709,6 +709,13 @@ const Q_BANK = window.IELTS_QUESTION_BANK_2026_05_08 || null;
 const P1_TOPICS = Q_BANK?.part1Topics || [];
 const P2_CARDS = Q_BANK?.part2Cards || [];
 const DAILY_SETS = Q_BANK?.dailySets || [];
+const MOCK_STANDARD = Object.freeze({
+  p1Count: 10,
+  p3Count: 5,
+  p2PrepSec: 60,
+  p2AnswerSec: 120,
+  autoStartDelayMs: 520,
+});
 
 function pickIconForTopic(name) {
   const n = String(name || '').toLowerCase();
@@ -980,6 +987,8 @@ function renderHome() {
   const today = fd(now);
   const done = !!S.completedDays[today];
   const set = getTodayPracticeSet();
+  const previewP1Pack = buildP1MockPack(S.customP1 || set.p1, MOCK_STANDARD.p1Count);
+  const previewP3Qs = buildP3Questions(S.customP2 || set.p2, MOCK_STANDARD.p3Count);
   document.getElementById('homeDate').textContent = `${now.getMonth()+1}月${now.getDate()}日 · 星期${days[now.getDay()]}`;
   document.getElementById('homeDay').textContent = `第 ${toSafeNonNegativeInt(S.totalPractice, 0) + 1} 天练习`;
   const btn = document.getElementById('btnStart');
@@ -988,26 +997,30 @@ function renderHome() {
   const setInfo = document.getElementById('todaySetInfo');
   if (setInfo) {
     if (set && set.p1 && set.p2) {
-      setInfo.innerHTML = `今日完整套题：Part 1「${escHtml(set.p1.name)}」 · Part 2「${escHtml(set.p2.topic)}」<br>Part 3 自动跟随 Part 2 延伸问题`;
+      const p1Topics = previewP1Pack.topicNames.length
+        ? previewP1Pack.topicNames.map(escHtml).join(' / ')
+        : escHtml(set.p1.name);
+      setInfo.innerHTML = `今日完整套题：Part 1（${previewP1Pack.questions.length}题）「${p1Topics}」 · Part 2（1题）「${escHtml(set.p2.topic)}」<br>Part 3（${previewP3Qs.length}题）自动跟随 Part 2 延伸问题`;
     } else {
       setInfo.textContent = '题库加载中，请刷新页面重试。';
     }
   }
   const preview = document.getElementById('todayPreview');
   if (preview && set && set.p1 && set.p2) {
+    const p2Cue = normalizeCuePoints(set.p2.cue);
     preview.innerHTML = `
       <div class="pv-block">
-        <div class="pv-title">Part 1 · ${escHtml(set.p1.name)}</div>
-        <ul class="pv-list">${(set.p1.qs || []).map(q => `<li>${escHtml(q)}</li>`).join('')}</ul>
+        <div class="pv-title">Part 1 · ${escHtml(previewP1Pack.topicNames.join(' / ') || set.p1.name)}（${previewP1Pack.questions.length}题）</div>
+        <ul class="pv-list">${previewP1Pack.questions.map(q => `<li>${escHtml(q)}</li>`).join('')}</ul>
       </div>
       <div class="pv-block">
         <div class="pv-title">Part 2 · ${escHtml(set.p2.catCn || set.p2.cat)} · ${escHtml(set.p2.topic)}</div>
         <div class="pv-topic">Cue cards</div>
-        <ul class="pv-list">${(set.p2.cue || []).map(q => `<li>${escHtml(q)}</li>`).join('')}</ul>
+        <ul class="pv-list">${p2Cue.map(q => `<li>${escHtml(q)}</li>`).join('')}</ul>
       </div>
       <div class="pv-block">
-        <div class="pv-title">Part 3 · 深度讨论</div>
-        <ul class="pv-list">${(set.p2.p3 || []).map(q => `<li>${escHtml(q)}</li>`).join('')}</ul>
+        <div class="pv-title">Part 3 · 深度讨论（${previewP3Qs.length}题）</div>
+        <ul class="pv-list">${previewP3Qs.map(q => `<li>${escHtml(q)}</li>`).join('')}</ul>
       </div>`;
   }
 
@@ -1055,6 +1068,93 @@ function updateTBStats() {
 // ================================================================
 //  PRACTICE FLOW
 // ================================================================
+function getTopicByName(name) {
+  return P1_TOPICS.find(x => x.name === name) || null;
+}
+
+function getTopicIndex(topic) {
+  if (!topic) return 0;
+  const idx = P1_TOPICS.findIndex(x => x.name === topic.name);
+  return idx >= 0 ? idx : 0;
+}
+
+function toCleanQuestion(text) {
+  return String(text || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeCuePoints(rawCue) {
+  const cues = Array.isArray(rawCue)
+    ? rawCue.map(x => toCleanQuestion(x)).filter(Boolean)
+    : [];
+  if (!cues.length) {
+    return [
+      'what it is',
+      'when or where it happened',
+      'what details are important',
+      'and explain why it is memorable'
+    ];
+  }
+  const hasExplain = cues.some(x => /explain/i.test(x));
+  if (!hasExplain) cues.push('and explain why this is important to you');
+  while (cues.length < 4) cues.push('add one relevant detail to support your answer');
+  return cues;
+}
+
+function buildP1MockPack(primaryTopic, targetCount = MOCK_STANDARD.p1Count) {
+  const count = Math.max(6, toSafeNonNegativeInt(targetCount, MOCK_STANDARD.p1Count));
+  const firstTopic = primaryTopic || P1_TOPICS[0];
+  const startIdx = getTopicIndex(firstTopic);
+  const questions = [];
+  const topicNames = [];
+  const seen = new Set();
+
+  for (let offset = 0; offset < P1_TOPICS.length && questions.length < count; offset++) {
+    const topic = P1_TOPICS[(startIdx + offset) % P1_TOPICS.length];
+    if (!topic) continue;
+    const topicQs = Array.isArray(topic.qs) ? topic.qs : [];
+    for (const rawQ of topicQs) {
+      const q = toCleanQuestion(rawQ);
+      if (!q || seen.has(q)) continue;
+      if (!topicNames.includes(topic.name)) topicNames.push(topic.name);
+      seen.add(q);
+      questions.push(q);
+      if (questions.length >= count) break;
+    }
+  }
+
+  return { questions: questions.slice(0, count), topicNames, firstTopic };
+}
+
+function buildP3Questions(card, targetCount = MOCK_STANDARD.p3Count) {
+  const count = Math.max(4, toSafeNonNegativeInt(targetCount, MOCK_STANDARD.p3Count));
+  const source = Array.isArray(card?.p3) ? card.p3 : [];
+  const questions = source.map(x => toCleanQuestion(x)).filter(Boolean);
+  return questions.slice(0, Math.min(count, questions.length));
+}
+
+function updateMockPartLabels() {
+  const p1Label = document.querySelector('#ptab1 .part-tab-label');
+  const p2Label = document.querySelector('#ptab2 .part-tab-label');
+  const p3Label = document.querySelector('#ptab3 .part-tab-label');
+  if (p1Label) p1Label.textContent = `${S.p1Qs.length || MOCK_STANDARD.p1Count}题`;
+  if (p2Label) p2Label.textContent = `1题·${Math.floor(MOCK_STANDARD.p2AnswerSec / 60)}分钟`;
+  if (p3Label) p3Label.textContent = `${S.p3Qs.length || MOCK_STANDARD.p3Count}题`;
+}
+
+function beginAutoAnswerAfterReading(partType) {
+  if (!S.hasStarted || S.part !== partType) return;
+  S.autoTimerPending = true;
+  const sec = partType === 2 ? MOCK_STANDARD.p2AnswerSec : S.settings.timerSec;
+  const hint = document.getElementById('recHint');
+  const stat = document.getElementById('timerStatus');
+  if (hint) hint.textContent = `朗读结束，${partType === 2 ? '2分钟' : `${sec}秒`}作答即将开始...`;
+  if (stat) stat.textContent = '正在进入作答倒计时...';
+  setTimeout(() => {
+    if (!S.hasStarted || S.part !== partType || !S.autoTimerPending || S.isRec) return;
+    startMic();
+  }, MOCK_STANDARD.autoStartDelayMs);
+}
+
 function pickP1(name) {
   const t = P1_TOPICS.find(x => x.name === name);
   if (!t) return;
@@ -1102,15 +1202,24 @@ async function startTodayPractice() {
   }
 
   const set = getTodayPracticeSet();
-  if (!S.customP1) S.customP1 = set.p1;
-  if (!S.customP2) S.customP2 = set.p2;
+  const p1Topic = S.customP1 || set.p1;
+  const p2Card = S.customP2 || set.p2;
+  const p1Pack = buildP1MockPack(p1Topic, MOCK_STANDARD.p1Count);
+  const p3Questions = buildP3Questions(p2Card, MOCK_STANDARD.p3Count);
 
-  if (!S.customP1?.qs?.length || !S.customP2?.p3?.length) {
+  if (!p1Pack.questions.length || !p3Questions.length) {
     toast('题目加载失败，请刷新后重试', 'err');
     return;
   }
 
-  S.currentSet = set;
+  S.customP1 = p1Pack.firstTopic;
+  S.customP2 = p2Card;
+  S.currentSet = {
+    ...set,
+    p1TopicNames: p1Pack.topicNames,
+    p1Count: p1Pack.questions.length,
+    p3Count: p3Questions.length,
+  };
   S.hasStarted = true;
   S.part = 1;
   S.p1Idx = 0;
@@ -1120,15 +1229,17 @@ async function startTodayPractice() {
   S.autoTimerPending = false;
   S.lastSavedKey = '';
   S.curQuestionKey = '';
-  S.p1Qs = S.customP1.qs;
-  S.p3Qs = S.customP2.p3;
+  S.p1Qs = p1Pack.questions;
+  S.p3Qs = p3Questions;
   stopSpeaking();
   clearInterval(S.timerInt);
+  stopMic({ pushTranscript: false });
 
   const t1 = S.p1Data.find(x => x.name === S.customP1.name);
   if (t1) t1.done = true;
 
   showPage('exam');
+  updateMockPartLabels();
   updateTabs();
   showP1Q();
 }
@@ -1168,8 +1279,8 @@ function showP1Q() {
   document.getElementById('qNum').textContent = `问题 ${S.p1Idx+1} / ${S.p1Qs.length}`;
   document.getElementById('qText').textContent = q;
   document.getElementById('qCue').style.display = 'none';
-  document.getElementById('btnNext').textContent = '下一题 ▶';
-  document.getElementById('btnNext').disabled = false;
+  document.getElementById('btnNext').textContent = '自动下一题';
+  document.getElementById('btnNext').disabled = true;
   document.getElementById('btnNext').className = 'btn primary';
   S.curQuestionKey = `P1-${S.p1Idx}`;
   const stat = document.getElementById('timerStatus');
@@ -1180,10 +1291,7 @@ function showP1Q() {
   speakQuestion(q, {
     onEnd: () => {
       if (S.part !== 1 || S.p1Qs[S.p1Idx] !== q) return;
-      S.autoTimerPending = true;
-      const hint = document.getElementById('recHint');
-      if (hint && !S.isRec) hint.textContent = '点击录音后开始20秒倒计时';
-      if (stat) stat.textContent = '点击录音开始作答';
+      beginAutoAnswerAfterReading(1);
     }
   });
 }
@@ -1193,6 +1301,7 @@ function showP2Q() {
   S.autoTimerPending = false;
   S.nextAfterSpeech = null;
   const card = S.customP2;
+  const cuePoints = normalizeCuePoints(card?.cue);
   S.curTranscript = '';
   S.recFinal = '';
   S.recInterim = '';
@@ -1203,15 +1312,15 @@ function showP2Q() {
   document.getElementById('qNum').textContent = card.topic;
   document.getElementById('qText').innerHTML = `<small style="color:var(--gold);font-size:12px;display:block;margin-bottom:8px;">${escHtml(card.cat)} · ${escHtml(card.catCn)}</small>${escHtml(card.topic)}`;
   document.getElementById('qCue').style.display = '';
-  document.getElementById('qCue').innerHTML = `<h4>📋 话题卡要点</h4><ul>${card.cue.map(c=>`<li>${escHtml(c)}</li>`).join('')}</ul>`;
+  document.getElementById('qCue').innerHTML = `<h4>📋 话题卡要点（完整）</h4><ul>${cuePoints.map(c=>`<li>${escHtml(c)}</li>`).join('')}</ul>`;
   document.getElementById('btnNext').textContent = '🎤 开始陈述（2分钟）';
   document.getElementById('btnNext').disabled = false;
   document.getElementById('btnNext').className = 'btn gold-btn';
   S.curQuestionKey = 'P2-0';
   const stat = document.getElementById('timerStatus');
-  if (stat) stat.textContent = '先阅读话题卡，准备后开始陈述';
+  if (stat) stat.textContent = '请先阅读完整话题卡，随后自动进入2分钟录音';
   const secEl = document.getElementById('timerSec');
-  if (secEl) secEl.textContent = 120;
+  if (secEl) secEl.textContent = MOCK_STANDARD.p2AnswerSec;
   updateProg('part2');
 }
 
@@ -1233,8 +1342,8 @@ function showP3Q() {
   document.getElementById('qNum').textContent = `问题 ${S.p3Idx+1} / ${S.p3Qs.length}`;
   document.getElementById('qText').textContent = q;
   document.getElementById('qCue').style.display = 'none';
-  document.getElementById('btnNext').textContent = '下一题 ▶';
-  document.getElementById('btnNext').disabled = false;
+  document.getElementById('btnNext').textContent = '自动下一题';
+  document.getElementById('btnNext').disabled = true;
   document.getElementById('btnNext').className = 'btn primary';
   S.curQuestionKey = `P3-${S.p3Idx}`;
   const stat = document.getElementById('timerStatus');
@@ -1245,10 +1354,7 @@ function showP3Q() {
   speakQuestion(q, {
     onEnd: () => {
       if (S.part !== 3 || S.p3Qs[S.p3Idx] !== q) return;
-      S.autoTimerPending = true;
-      const hint = document.getElementById('recHint');
-      if (hint && !S.isRec) hint.textContent = '点击录音后开始20秒倒计时';
-      if (stat) stat.textContent = '点击录音开始作答';
+      beginAutoAnswerAfterReading(3);
     }
   });
 }
@@ -1278,7 +1384,7 @@ function goP2() {
   S.transStep = 'cue';
   document.getElementById('transIcon').textContent = '📋';
   document.getElementById('transTitle').textContent = '准备 Part 2 · 长对话题';
-  document.getElementById('transDesc').innerHTML = `<b>${S.customP2.topic}</b><br>有 1 分钟阅读话题卡并准备要点，然后进行 2 分钟陈述。`;
+  document.getElementById('transDesc').innerHTML = `<b>${escHtml(S.customP2.topic)}</b><br>有 ${MOCK_STANDARD.p2PrepSec} 秒阅读话题卡并准备要点，然后进行 ${Math.floor(MOCK_STANDARD.p2AnswerSec / 60)} 分钟陈述。`;
   document.getElementById('btnTrans').textContent = '📋 查看话题卡';
 }
 
@@ -1299,15 +1405,16 @@ function onTransBtn() {
 function showCueScreen() {
   S.expectingP2Start = false;
   const card = S.customP2;
+  const cuePoints = normalizeCuePoints(card?.cue);
   document.getElementById('cueContent').innerHTML = `
     <div class="cue-topic">
-      <div class="cue-cat">${card.cat} · ${card.catCn}</div>
-      <h2>${card.topic}</h2>
-      <ul class="cue-ul">${card.cue.map(c=>`<li>${c}</li>`).join('')}</ul>
+      <div class="cue-cat">${escHtml(card.cat)} · ${escHtml(card.catCn)}</div>
+      <h2>${escHtml(card.topic)}</h2>
+      <ul class="cue-ul">${cuePoints.map(c=>`<li>${escHtml(c)}</li>`).join('')}</ul>
     </div>`;
-  document.getElementById('cueTimer').textContent = '60';
+  document.getElementById('cueTimer').textContent = String(MOCK_STANDARD.p2PrepSec);
   document.getElementById('cueFullscreen').classList.add('show');
-  let t = 60;
+  let t = MOCK_STANDARD.p2PrepSec;
   if (S.prepInt) clearInterval(S.prepInt);
   S.prepInt = setInterval(() => {
     t--;
@@ -1318,6 +1425,7 @@ function showCueScreen() {
 
 function closeCue() {
   clearInterval(S.prepInt);
+  S.prepInt = null;
   document.getElementById('cueFullscreen').classList.remove('show');
 }
 
@@ -1340,29 +1448,31 @@ function startP2Speaking() {
   showP2Q();
   S.autoTimerPending = true;
   const stat = document.getElementById('timerStatus');
-  if (stat) stat.textContent = '点击录音后开始2分钟陈述';
+  if (stat) stat.textContent = '正在进入2分钟陈述录音...';
   const hint = document.getElementById('recHint');
-  if (hint) hint.textContent = '点击开始录音';
+  if (hint) hint.textContent = '请准备作答，录音即将自动开始';
+  beginAutoAnswerAfterReading(2);
 }
 
 function nextQ() {
+  if (S.part === 1 || S.part === 3) {
+    toast('当前为完整模考流程：每题会自动进入录音并自动跳转', 'ok');
+    return;
+  }
   stopMic({ pushTranscript: true });
-  if (S.part === 1) {
-    if (S.p1Idx < S.p1Qs.length-1) { S.p1Idx++; showP1Q(); }
-    else goP2();
-  } else if (S.part === 2) {
+  if (S.part === 2) {
     if (!S.expectingP2Start) {
       S.expectingP2Start = true;
       startP2Speaking();
     }
   }
-  else if (S.part === 3) {
-    if (S.p3Idx < S.p3Qs.length-1) { S.p3Idx++; showP3Q(); }
-    else finishAll();
-  }
 }
 
 function skipQ() {
+  if (S.part === 2) {
+    toast('Part 2 为核心陈述阶段，不能跳过。', 'err');
+    return;
+  }
   stopMic({ pushTranscript: true });
   if (S.part === 1) {
     if (S.p1Idx < S.p1Qs.length-1) { S.p1Idx++; showP1Q(); }
@@ -1386,14 +1496,16 @@ function updateProg(phase) {
   const fill = document.getElementById('progFill');
   const lbl = document.getElementById('progLabel');
   if (phase === 'part1') {
-    fill.style.width = ((S.p1Idx+1)/S.p1Qs.length*33)+'%';
-    lbl.textContent = `Part 1 · ${S.p1Idx+1}/${S.p1Qs.length}`;
+    const total = Math.max(1, S.p1Qs.length);
+    fill.style.width = ((S.p1Idx+1)/total*33)+'%';
+    lbl.textContent = `Part 1 · ${S.p1Idx+1}/${total}`;
   } else if (phase === 'part2') {
     fill.style.width = '55%';
     lbl.textContent = 'Part 2 · 长对话题';
   } else {
-    fill.style.width = (66+((S.p3Idx+1)/S.p3Qs.length*34))+'%';
-    lbl.textContent = `Part 3 · ${S.p3Idx+1}/${S.p3Qs.length}`;
+    const total = Math.max(1, S.p3Qs.length);
+    fill.style.width = (66+((S.p3Idx+1)/total*34))+'%';
+    lbl.textContent = `Part 3 · ${S.p3Idx+1}/${total}`;
   }
 }
 
@@ -1642,7 +1754,7 @@ function toggleMic() {
 function startMic() {
   if (S.part !== 1 && S.part !== 2 && S.part !== 3) return;
   if (S.autoTimerPending) {
-    const sec = S.part === 2 ? 120 : S.settings.timerSec;
+    const sec = S.part === 2 ? MOCK_STANDARD.p2AnswerSec : S.settings.timerSec;
     const onEnd = S.part === 1
       ? () => { stopMic({ pushTranscript: true }); autoAdv(); }
       : S.part === 2
@@ -1654,7 +1766,7 @@ function startMic() {
               showPage('trans');
               document.getElementById('transIcon').textContent = '💬';
               document.getElementById('transTitle').textContent = '准备 Part 3 · 深度讨论';
-              document.getElementById('transDesc').textContent = `考官将就 Part 2 话题进行深入讨论，每题约 ${S.settings.timerSec} 秒。`;
+              document.getElementById('transDesc').textContent = `考官将就 Part 2 话题进行深入讨论，共 ${S.p3Qs.length || MOCK_STANDARD.p3Count} 题，每题约 ${S.settings.timerSec} 秒。`;
               document.getElementById('btnTrans').textContent = '💬 开始 Part 3';
             }, 800);
           }
@@ -1663,7 +1775,7 @@ function startMic() {
     S.autoTimerPending = false;
   } else if (S.part === 2 && !S.timerInt) {
     // 防止Part 2未开始计时就进入录音
-    startTimer(120, () => {
+    startTimer(MOCK_STANDARD.p2AnswerSec, () => {
       stopMic({ pushTranscript: true });
       toast('⏰ Part 2 陈述时间结束！');
       setTimeout(() => {
@@ -1671,7 +1783,7 @@ function startMic() {
         showPage('trans');
         document.getElementById('transIcon').textContent = '💬';
         document.getElementById('transTitle').textContent = '准备 Part 3 · 深度讨论';
-        document.getElementById('transDesc').textContent = `考官将就 Part 2 话题进行深入讨论，每题约 ${S.settings.timerSec} 秒。`;
+        document.getElementById('transDesc').textContent = `考官将就 Part 2 话题进行深入讨论，共 ${S.p3Qs.length || MOCK_STANDARD.p3Count} 题，每题约 ${S.settings.timerSec} 秒。`;
         document.getElementById('btnTrans').textContent = '💬 开始 Part 3';
       }, 800);
     });
@@ -1688,7 +1800,7 @@ function startMic() {
   document.getElementById('btnMic').classList.add('recording');
   const h = document.getElementById('recHint');
   h.textContent = '🔴 录音中...'; h.classList.add('on');
-  toast('🎙️ 录音开始', 'ok');
+  toast(`🎙️ ${S.part === 2 ? 'Part 2' : S.part === 3 ? 'Part 3' : 'Part 1'} 录音开始`, 'ok');
 }
 
 function stopMic(opts = {}) {
@@ -1872,6 +1984,7 @@ function closeHistory() { document.getElementById('historyModal').classList.remo
 
 function backHome() {
   clearInterval(S.timerInt);
+  clearInterval(S.prepInt);
   S.autoTimerPending = false;
   S.expectingP2Start = false;
   S.hasStarted = false;
@@ -1879,6 +1992,7 @@ function backHome() {
   S.lastSavedKey = '';
   stopSpeaking();
   stopMic({ pushTranscript: false });
+  closeCue();
   showPage('home');
   renderHome();
   buildSidebar();
